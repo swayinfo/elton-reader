@@ -55637,7 +55637,7 @@ function buildReaderExtraSettings(view, p) {
   buildBookSettings(view, p);
 }
 function escHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 async function copyToClipboard(text) {
   if (!text) return false;
@@ -57809,7 +57809,8 @@ async function extractFb2(file, app) {
   const images = {};
   for (const b of Array.from(doc.getElementsByTagName("binary"))) {
     const id = b.getAttribute("id");
-    const ct = b.getAttribute("content-type") || "image/jpeg";
+    const ctRaw = b.getAttribute("content-type") || "image/jpeg";
+    const ct = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"].includes(ctRaw.trim().toLowerCase()) ? ctRaw.trim().toLowerCase() : "image/jpeg";
     const data = (b.textContent || "").replace(/\s+/g, "");
     if (id && data) images[id] = `data:${ct};base64,${data}`;
   }
@@ -58565,7 +58566,11 @@ function nodeToHtml(el) {
   if (tag === "img") {
     const src = (_c2 = (_b2 = el.getAttribute) == null ? void 0 : _b2.call(el, "src")) != null ? _c2 : "";
     if (!src) return "";
-    return `<img src="${escHtml(src)}" style="max-width:100%;height:auto;display:block;margin:8px auto">`;
+    const style = "max-width:100%;height:auto;display:block;margin:8px auto";
+    if (/^data:/.test(src.replace(/[\x00-\x20]+/g, "").toLowerCase()))
+      return `<img src="${escHtml(src)}" style="${style}">`;
+    const alt = ((_a2 = el.getAttribute) == null ? void 0 : _a2.call(el, "alt")) || "";
+    return alt ? `<img alt="${escHtml(alt)}" style="${style}">` : `<img style="${style}">`;
   }
   if (tag === "pre") {
     const code = (el.textContent || "").replace(/\s+$/, "");
