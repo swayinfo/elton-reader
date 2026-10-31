@@ -346,6 +346,10 @@ Object.assign(__erEN, {
     "In scrolling mode a footnote link now leads to the footnote instead of the start of the book",
   "Заголовок главы над цитатами":
     "Chapter heading above quotes",
+  "Открывать книгу снова после перезапуска":
+    "Reopen the book after a restart",
+  "Если приложение закрылось, когда книга была открыта, при следующем запуске она откроется на том же месте. Закрытая книга не открывается.":
+    "If the app was closed while a book was open, the next start opens it again at the same place. A book you closed stays closed.",
   "При выгрузке цитаты группируются по главе книги, и над группой пишется её название. Выключите, если главы короткие и совпадают почти у каждой цитаты.":
     "Exported quotes are grouped by the book's chapter, with the chapter name printed above the group. Turn off if chapters are short and keep coinciding on almost every quote.",
 });
@@ -364,6 +368,10 @@ function __ertr(s){
 
 
 const VIEW_TYPE = "elton-reader";
+// Per device, in Obsidian's local storage: the book open in the phone's reader
+// dialog right now. A dialog is not part of the saved workspace, so without this
+// a restart always lands back on the vault instead of the page being read.
+const ER_OPEN_BOOK_KEY = "elton-reader-open-book";
 const DEFAULT = {
   // Interface language: "ru" (default) or "en".
   language: "ru",
@@ -484,6 +492,9 @@ const DEFAULT = {
   immersive: true,
   // Ручной отступ сверху на телефоне, px. 0 — высоту статус-бара берём у системы.
   mobileTopInset: 0,
+  // На телефоне: книга, открытая в момент закрытия приложения, открывается снова
+  // при следующем запуске (на компьютере это делает сама рабочая область).
+  reopenBookOnStart: true,
   // Set to true once the first-run welcome slideshow has been shown, so it never
   // pops up again on its own (can still be re-opened from Settings).
   onboarded: false,
@@ -1370,6 +1381,14 @@ async function setupWorker(app) {
   workerReady = true;
 }
 const EltonReader = class extends Plugin {
+  // The phone's reader dialog does not belong to the workspace, so nothing
+  // closes it when the plugin goes away (disabled, or updated by a sync) — it
+  // stayed on screen with its plugin gone. Close it, but leave the "open book"
+  // mark: an update reloads the plugin, and the book comes straight back.
+  onunload() {
+    this._unloading = true;
+    try { this._openReaderModal?.close(); } catch { /* optional step; a failure here must not interrupt reading */ }
+  }
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT };
@@ -1497,6 +1516,14 @@ const EltonReader = class extends Plugin {
       id: "open-book-picker",
       name: __ertr("Открыть книгу…"),
       callback: () => new BookQuickOpen(this.app, this).open()
+    });
+    // The book that was open when the phone app was last closed.
+    this.app.workspace.onLayoutReady(() => {
+      if (!erIsMobile(this.app) || this.settings.reopenBookOnStart === false) return;
+      const path5 = this.app.loadLocalStorage(ER_OPEN_BOOK_KEY);
+      const f = path5 ? this.app.vault.getAbstractFileByPath(path5) : null;
+      // after the start-up layout and whatever a home-page plugin opens
+      if (f instanceof TFile) window.setTimeout(() => { if (!this._openReaderModal) this.openFile(f); }, 400);
     });
     // One command per book, so a book can be given its own hotkey. Deferred: at
     // onload the vault index is still filling and getFiles() would miss books.
@@ -6920,8 +6947,23 @@ const ReaderView = class extends ItemView {
     if (this.file && this.file.path === path5 && this.bookHtml)
       return;
     const f = this.app.vault.getAbstractFileByPath(path5);
-    if (f instanceof TFile)
-      await this.openFile(f);
+    if (!(f instanceof TFile))
+      return;
+    // On a phone the book belongs in the dialog (see openFile in the plugin),
+    // but plenty of roads lead to a tab instead: the file list, a link in a
+    // note, another plugin calling leaf.openFile(), a tab restored from the
+    // last session. In a tab Obsidian's floating header covers the reader's
+    // top bar and the clock, and the mobile navbar covers the bottom bar —
+    // measured on Android, Obsidian 1.12: the view starts at y=0 under a
+    // header at 45–89 and a navbar at 824–876 of 890. So the tab hands the
+    // book to the dialog and closes itself.
+    if (erIsMobile(this.app)) {
+      this.file = f;
+      new ReaderModal(this.app, this.plugin, f).open();
+      window.setTimeout(() => this.leaf.detach(), 0);
+      return;
+    }
+    await this.openFile(f);
   }
   async onOpen() {
     this.buildDOM();
@@ -8728,6 +8770,9 @@ const ReaderModal = class extends Modal {
     // Let commands find the open mobile reader — it is a Modal, so it never
     // appears in getActiveViewOfType().
     this.plugin._openReaderModal = this;
+    // Still open when the app is killed (the usual way a phone app ends) means
+    // still being read: the next start opens it again. Closing the book clears it.
+    if (this.file) this.app.saveLocalStorage(ER_OPEN_BOOK_KEY, this.file.path);
     // Don't let Esc close the reader: it was yanking you out of the whole book
     // when you only meant to dismiss a zoomed image. Remove Obsidian's built-in
     // Esc→close handler from this modal's scope; the book is closed with the ←
@@ -9577,6 +9622,7 @@ const ReaderModal = class extends Modal {
   onClose() {
     stopReadingTimer(this);
     if (this.plugin._openReaderModal === this) this.plugin._openReaderModal = null;
+    if (!this.plugin._unloading) this.app.saveLocalStorage(ER_OPEN_BOOK_KEY, null);
     // The search paint is a document-level highlight; it would outlive the book.
     clearFoundIn(this);
     if (this._selHandler) (this._selDoc || document).removeEventListener("selectionchange", this._selHandler);
@@ -9965,6 +10011,12 @@ const SettingsTab = class extends PluginSettingTab {
         this.plugin.settings.immersive = v; await this.plugin.saveAll();
       }));
     if (Platform.isMobile) {
+      new Setting(c)
+        .setName(__ertr("Открывать книгу снова после перезапуска"))
+        .setDesc(__ertr("Если приложение закрылось, когда книга была открыта, при следующем запуске она откроется на том же месте. Закрытая книга не открывается."))
+        .addToggle((t) => t.setValue(this.plugin.settings.reopenBookOnStart !== false).onChange(async (v) => {
+          this.plugin.settings.reopenBookOnStart = v; await this.plugin.saveAll();
+        }));
       new Setting(c)
         .setName(__ertr("Отступ сверху на телефоне"))
         .setDesc(__ertr("Обычно система сама сообщает высоту «шторки» с часами, и верхняя панель встаёт под ней. На части Android-оболочек (например, Samsung One UI) она этого не делает — панель заезжает под часы. Тогда впишите здесь высоту в пикселях, обычно 24–48. Ноль — доверять системе. Откройте книгу заново, чтобы применить."))
