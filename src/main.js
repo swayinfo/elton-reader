@@ -596,6 +596,9 @@ function erTheme(settings) {
   return THEMES[s.theme] || THEMES.auto;
 }
 const FONTS = {
+  // The text font of Obsidian itself — the theme's, or the one picked in
+  // Settings → Appearance. A variable, so a theme change shows at once.
+  obsidian: "var(--font-text)",
   georgia: "Georgia,'Times New Roman',serif",
   lora: "'Lora',Georgia,serif",
   inter: "'Inter',system-ui,sans-serif"
@@ -7538,9 +7541,9 @@ const ReaderView = class extends ItemView {
     });
     secA(__ertr("Шрифт"));
     const ffRow = adv.createDiv("er-ff-row");
-    ["georgia", "lora", "inter"].forEach((f) => {
+    ["obsidian", "georgia", "lora", "inter"].forEach((f) => {
       const btn = ffRow.createDiv("er-ff-btn");
-      btn.setText({ georgia: "Georgia", lora: "Lora", inter: "Inter" }[f]);
+      btn.setText({ obsidian: "Obsidian", georgia: "Georgia", lora: "Lora", inter: "Inter" }[f]);
       btn.style.fontFamily = FONTS[f];
       if (this.plugin.settings.fontFamily === f)
         btn.addClass("active");
