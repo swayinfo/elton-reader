@@ -8421,7 +8421,7 @@ const ReadSettingsModal = class extends Modal {
     this._seg(
       a,
       __ertr("Тема"),
-      [["auto", __ertr("Как в Obsidian")], ["light", __ertr("Светлая")], ["dark", __ertr("Тёмная")], ["sepia", "Sepia"], ["eink", "E-ink"]],
+      [["auto", __ertr("Как в Obsidian")], ["light", __ertr("Светлая")], ["dark", __ertr("Тёмная")], ["sepia", __ertr("Сепия")], ["eink", "E-ink"]],
       () => s.einkMode ? "eink" : s.theme,
       async (t) => {
         if (t === "eink") s.einkMode = true;
@@ -9772,6 +9772,9 @@ function bookNoteAction(settings, bookPath) {
   if (s.autoBookNote) return asked[bookPath] ? "prompted" : "auto";
   return asked[bookPath] ? "prompted" : "ask";
 }
+// 4.0.1
+Object.assign(__erEN, { "«Сепия» в настройках чтения и в панели на телефоне названа на языке интерфейса, а не латиницей": "“Sepia” in the reading settings and the phone panel is now named in the interface language" });
+Object.assign(__erZH, { "«Сепия» в настройках чтения и в панели на телефоне названа на языке интерфейса, а не латиницей": "阅读设置和手机面板中的“复古色”现在以界面语言显示，不再是英文" });
 // 4.0.0 «Что нового», rewritten to match the release.
 Object.assign(__erEN, {
   "Чтение вслух через Elton AI: кнопка 🔊 рядом с таймером читает выделенное или книгу с текущей страницы и сама листает, звучащее слово подсвечено; восемь голосов, скорость от 1× до 2×": "Read aloud with Elton AI: the 🔊 button next to the timer reads the selection or the book from the current page and turns the pages itself, the word being spoken is lit; eight voices, speed from 1× to 2×",
@@ -9830,6 +9833,9 @@ Object.assign(__erZH, {
   "Свой шрифт, поля, фактура или картинка под текстом.": "自定义字体、页边距、纹理或文字下的图片。"
 });
 const WHATS_NEW = [
+  { v: "4.0.1", items: [
+    __ertr("«Сепия» в настройках чтения и в панели на телефоне названа на языке интерфейса, а не латиницей")
+  ] },
   { v: "4.0.0", items: [
     __ertr("Чтение вслух через Elton AI: кнопка 🔊 рядом с таймером читает выделенное или книгу с текущей страницы и сама листает, звучащее слово подсвечено; восемь голосов, скорость от 1× до 2×"),
     __ertr("Пока голос готовится, внизу страницы видна плашка «Готовлю озвучку…» — нажатие на неё отменяет"),
@@ -10005,9 +10011,10 @@ const WhatsNewModal = class extends Modal {
     this.noteFile = noteFile || null;
   }
   onOpen() {
-    const first = this.releases && this.releases[0];
-    const slides = first && WHATS_NEW_SLIDES[first.v];
-    if (slides && slides.length) this._renderCards(slides, first.v);
+    // Cards of the newest release that has them: someone coming from 3.x to a
+    // 4.0.x fix release must still get the 4.0 story, not a bare list.
+    const withCards = (this.releases || []).find((r) => (WHATS_NEW_SLIDES[r.v] || []).length);
+    if (withCards) this._renderCards(WHATS_NEW_SLIDES[withCards.v], this.releases[0].v);
     else this._renderList();
   }
   // The way a phone presents what is new: a large title, a short list — an
@@ -12890,7 +12897,7 @@ const ReaderModal = class extends Modal {
     const thRow = p.createDiv("er-theme-row");
     ["auto","dark","light","sepia","eink"].forEach(t => {
       const btn = thRow.createDiv(`er-theme-btn er-theme-${t}`);
-      btn.setText({ auto:__ertr("Как в Obsidian"), dark:__ertr("\u0422\u0451\u043C\u043D\u0430\u044F"), light:__ertr("\u0421\u0432\u0435\u0442\u043B\u0430\u044F"), sepia:"Sepia", eink:"E-ink" }[t]);
+      btn.setText({ auto:__ertr("Как в Obsidian"), dark:__ertr("\u0422\u0451\u043C\u043D\u0430\u044F"), light:__ertr("\u0421\u0432\u0435\u0442\u043B\u0430\u044F"), sepia:__ertr("Сепия"), eink:"E-ink" }[t]);
       if (this.plugin.settings.theme === t) btn.addClass("active");
       btn.addEventListener("click", async () => {
         this.plugin.settings.theme = t;
