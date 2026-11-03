@@ -1176,6 +1176,12 @@ function icon(n) {
 // A page counts as "short" — worth centring — only when this much of it is empty.
 // Below the threshold the page is essentially full and must stay put.
 const SHORT_PAGE_GAP = 0.35;
+// Long books are laid out a window at a time (Paginator._prepWindows): a book
+// with more text than ER_WINDOW_MIN characters shows about ER_WINDOW of it at
+// once. A picture counts as ER_PIC_WEIGHT characters.
+const ER_WINDOW_MIN = 300000;
+const ER_WINDOW = 150000;
+const ER_PIC_WEIGHT = 800;
 // How long a search match stays painted before fading out by itself.
 const FOUND_PAINT_MS = 4000;
 // Upper bound on per-book commands. Enough for a normal shelf; a 500-book vault
@@ -1795,7 +1801,8 @@ function erTtsShow(view, range, block) {
     // same reckoning a jump to a highlight uses.
     if (r && (r.width || r.height) && pager.sw) {
       const fr = pager.flow.getBoundingClientRect();
-      const target = Math.max(0, Math.floor((r.left - fr.left) / pager.sw + 1e-3));
+      // The strip holds only the window of a long book: its pages start at base.
+      const target = (pager._win ? pager._win.base : 0) + Math.max(0, Math.floor((r.left - fr.left) / pager.sw + 1e-3));
       if (target !== pager.spread) ui(...pager.jumpTo(target));
     } else if (typeof block === "number" && block >= 0) {
       const target = pager.spreadForBlock(block);
@@ -4383,6 +4390,9 @@ const Paginator = class {
       && this.flow.parentElement === this.clip
       && this.clip.parentElement === container
       && this._html === html);
+    // A windowed book being re-laid out keeps its place: the new window is cut
+    // around the block that is on screen now.
+    const keepBlock = переклад && this._win ? this.currentBlockIndex() : null;
     if (!переклад) container.empty();
     const t = erTheme(settings);
     // Vertical placement is decided per spread from real geometry, so both the
@@ -4605,6 +4615,8 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
    the column layout places, so the column it lands in is the last column the
    book occupies. See the measurement in step 5. */
 .er-flow .er-end{display:block;height:0;margin:0;padding:0;border:0;visibility:hidden}
+/* The part of a long book outside the current window: kept, but not laid out. */
+.er-flow .er-off{display:none !important}
 `;
     const markup = `<style>${css}</style>${html}<div class="er-end" aria-hidden="true"></div>`;
     // A re-layout keeps the book's nodes, and with them the old <style>: its
@@ -4631,6 +4643,13 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
     }
     this._html = html;
     }
+    // A long book is laid out a window at a time (see _prepWindows) — decided
+    // here, before the first frame, or the browser lays out the whole book once.
+    this._geo = { slot, gap, cols, pad, colW, flowW, figMaxH: Math.max(40, aHinner - 24) };
+    if (!this.scrollMode && this._prepWindows()) {
+      const at = keepBlock != null ? keepBlock : Math.max(0, Number(this.anchorBlock) || 0);
+      this._applyWindow(...this._spanAround(this._unitOfBlock(at)));
+    } else this._dropWindows();
 
     /* 4. Two rAF: first inserts DOM, second completes multicol layout */
     await new Promise(r => window.requestAnimationFrame(r));
@@ -4649,49 +4668,8 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
        Sizing the placeholder from the PDF's own dimensions, clamped to the column
        exactly as the stylesheet would, makes loading and unloading a figure a
        purely cosmetic event. */
-    const figMaxH = Math.max(40, aHinner - 24);
-    for (const img of this.flow.querySelectorAll("img.er-pdf-lazy")) {
-      const aw = parseFloat(img.getAttribute("width")) || 0;
-      const ah = parseFloat(img.getAttribute("height")) || 0;
-      if (!aw || !ah) continue;
-      const host = img.parentElement;
-      const hostW = host ? host.getBoundingClientRect().width - pad * 2 : colW - pad * 2;
-      const maxW = Math.max(40, hostW);
-      const scale = Math.min(1, maxW / aw, figMaxH / ah);
-      img.style.width = `${Math.round(aw * scale)}px`;
-      img.style.height = `${Math.round(ah * scale)}px`;
-    }
+    this._sizeFigures();
     await new Promise(r => window.requestAnimationFrame(r));
-
-    /* 5. How many columns the book actually occupies.
-          Read off ONE element: the empty marker appended after all the content,
-          which the column layout necessarily places in the last column in use.
-
-          What this replaces scanned every p/h1-h4/img and took the rightmost
-          edge, and it was wrong twice over. It could not see a list, a code
-          listing, a table or a blockquote, so a book whose tail is any of those
-          measured as though it ended at its last paragraph — and step (b) then
-          cut the flow off there for real, leaving the rest of the book behind a
-          wall. Measured in Chrome: a list-heavy book needing 142 spreads showed
-          5, one needing 48 showed 2. That is the "book opens with only 14 pages
-          and skips whole chunks" report, and it happened in one-column mode too,
-          so switching to a single column only ever helped by coincidence.
-          It was also a getBoundingClientRect per block, run twice, which is a
-          large part of why a 3000-page book took seconds to open. */
-    const endEl = this.flow.querySelector(".er-end");
-    const measure = () => {
-      const fRect = this.flow.getBoundingClientRect();
-      let lastX = endEl ? endEl.getBoundingClientRect().right - fRect.left : 0;
-      if (lastX <= 0) {
-        /* No marker to go by — fall back to the widest block we can find. */
-        for (const el of this.flow.querySelectorAll(
-          "p,h1,h2,h3,h4,h5,h6,img,li,pre,table,blockquote,figure,dd,dt")) {
-          const r = el.getBoundingClientRect().right - fRect.left;
-          if (r > lastX) lastX = r;
-        }
-      }
-      return Math.max(1, Math.ceil(lastX / slot));
-    };
 
     /* Scrolling has no columns to count: a "spread" is one screenful, and the
        book is as many of those as its height divides into. Measured from the
@@ -4741,14 +4719,76 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
       this._guardedClip = this.clip;
     }
     this._clipGuard();
+    const nPhys = this._countColumns();
+    this.total = Math.max(1, Math.ceil(nPhys / cols));
+    if (this._win) this._windowTotals();
+    this.spread = Math.max(0, Math.min(this._win ? this._win.base + savedSpread : savedSpread, this.total - 1));
+    this.flow.toggleClass("er-flow-anim", this.animate !== false);
+    this.applyTransform(false);
+    return [this.spread, this.total];
+  }
+  // Placeholders for lazy figures sized from the PDF's own dimensions (4b in
+  // build). Figures in the part of a windowed book that is not shown are sized
+  // when their window comes up: a hidden host has no width to clamp to.
+  _sizeFigures() {
+    const { pad, colW, figMaxH } = this._geo;
+    for (const img of this.flow.querySelectorAll("img.er-pdf-lazy")) {
+      if (img.dataset.erSized === "1" || (this._win && img.closest(".er-off"))) continue;
+      const aw = parseFloat(img.getAttribute("width")) || 0;
+      const ah = parseFloat(img.getAttribute("height")) || 0;
+      if (!aw || !ah) continue;
+      const host = img.parentElement;
+      const hostW = host ? host.getBoundingClientRect().width - pad * 2 : colW - pad * 2;
+      const maxW = Math.max(40, hostW);
+      const scale = Math.min(1, maxW / aw, figMaxH / ah);
+      img.style.width = `${Math.round(aw * scale)}px`;
+      img.style.height = `${Math.round(ah * scale)}px`;
+      img.dataset.erSized = "1";
+    }
+  }
+  // How many columns the text occupies, with the flow trimmed to them; also
+  // sets the stride and the column anchor table. Synchronous: reading the
+  // geometry forces the layout, so a window can be swapped mid page turn.
+  _countColumns() {
+    const { slot, gap, cols, flowW } = this._geo;
+    this.flow.style.width = `${flowW}px`;
+    /* 5. How many columns the book actually occupies.
+          Read off ONE element: the empty marker appended after all the content,
+          which the column layout necessarily places in the last column in use.
+
+          What this replaces scanned every p/h1-h4/img and took the rightmost
+          edge, and it was wrong twice over. It could not see a list, a code
+          listing, a table or a blockquote, so a book whose tail is any of those
+          measured as though it ended at its last paragraph — and step (b) then
+          cut the flow off there for real, leaving the rest of the book behind a
+          wall. Measured in Chrome: a list-heavy book needing 142 spreads showed
+          5, one needing 48 showed 2. That is the "book opens with only 14 pages
+          and skips whole chunks" report, and it happened in one-column mode too,
+          so switching to a single column only ever helped by coincidence.
+          It was also a getBoundingClientRect per block, run twice, which is a
+          large part of why a 3000-page book took seconds to open. */
+    const endEl = this.flow.querySelector(".er-end");
+    const measure = () => {
+      const fRect = this.flow.getBoundingClientRect();
+      let lastX = endEl ? endEl.getBoundingClientRect().right - fRect.left : 0;
+      if (lastX <= 0) {
+        /* No marker to go by — fall back to the widest block we can find. */
+        for (const el of this.flow.querySelectorAll(
+          "p,h1,h2,h3,h4,h5,h6,img,li,pre,table,blockquote,figure,dd,dt")) {
+          const r = el.getBoundingClientRect().right - fRect.left;
+          if (r > lastX) lastX = r;
+        }
+      }
+      return Math.max(1, Math.ceil(lastX / slot));
+    };
+
     /* a) count the columns on the roomy layout */
     let nPhys = measure();
     /* b) trim the flow to exactly those columns. The column width is fixed by
           construction, so nothing re-breaks and the count holds still. */
     this.flow.style.width = `${Math.ceil(nPhys * slot) - gap}px`;
-    await new Promise(r => window.requestAnimationFrame(r));
-    await new Promise(r => window.requestAnimationFrame(r));
-    /* c) confirm on the trimmed layout, and never shrink below what was seen */
+    /* c) confirm on the trimmed layout, and never shrink below what was seen
+          (reading the geometry makes the browser lay the trimmed flow out). */
     nPhys = Math.max(nPhys, measure());
 
     this.sw = slot * cols;
@@ -4776,7 +4816,7 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
       const endX = endEl ? endEl.getBoundingClientRect().left - fRect2.left : 0;
       if (endEl && Math.abs(endX - (nPhys - 1) * slot) > 1) {
         this._colX = /* @__PURE__ */ new Map();
-        for (const el of this.flow.querySelectorAll("p,h1,h2,h3,h4")) {
+        for (const el of this._shownBlocks()) {
           const x = el.getBoundingClientRect().left - fRect2.left;
           const k = Math.round(x / slot);
           // Keep the smallest offset seen for a column: blocks indented by margin
@@ -4785,11 +4825,7 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
         }
       }
     } catch { this._colX = null; }
-    this.total = Math.max(1, Math.ceil(nPhys / cols));
-    this.spread = Math.max(0, Math.min(savedSpread, this.total - 1));
-    this.flow.toggleClass("er-flow-anim", this.animate !== false);
-    this.applyTransform(false);
-    return [this.spread, this.total];
+    return nPhys;
   }
   // How far down to nudge the page so a short spread isn't stranded at the top.
   //
@@ -4807,7 +4843,7 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
     try {
       if (!this._blockGeom) {
         const fRect = this.flow.getBoundingClientRect();
-        this._blockGeom = [...this._blocks()].map((el) => {
+        this._blockGeom = [...this._shownBlocks()].map((el) => {
           const r = el.getBoundingClientRect();
           return { x: r.left - fRect.left, bottom: r.bottom - fRect.top };
         });
@@ -4835,7 +4871,7 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
   // columns holding no text block (a full-page image, say).
   _spreadOffset() {
     if (this.scrollMode) return this.clip ? this.clip.scrollTop : 0;
-    const k = this.spread * (this.cols || 1);
+    const k = this.localSpread * (this.cols || 1);
     const exact = this._colX && this._colX.get(k);
     if (typeof exact === "number") return exact;
     // Column with no text block of its own (a full-page figure). Anchor on the
@@ -4848,7 +4884,7 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
       }
       if (bestK !== null) return this._colX.get(bestK) + (k - bestK) * (this._pitch || this.sw / (this.cols || 1));
     }
-    return this.spread * this.sw;
+    return this.localSpread * this.sw;
   }
   applyTransform(animate = true) {
     if (this.scrollMode) {
@@ -4883,19 +4919,55 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
     }
   }
   next() {
+    const w = this._win;
+    if (w && this.spread >= w.base + w.local - 1 && w.b < this._units.length) {
+      // Past the window's last page: the next window starts exactly where this
+      // one stopped, so its first page is the next page of the book.
+      const at = this.spread + 1;
+      this._applyWindow(...this._spanFrom(w.b));
+      this._relayout(at);
+      this.spread = at;
+      this.applyTransform(false);
+      return [this.spread, this.total];
+    }
     if (this.spread < this.total - 1)
       this.spread++;
     this.applyTransform();
     return [this.spread, this.total];
   }
   prev() {
+    const w = this._win;
+    if (w && this.spread <= w.base && w.a > 0) {
+      const at = this.spread - 1;
+      this._applyWindow(...this._spanTo(w.a));
+      this._relayout();
+      this._win.base = Math.max(0, at - this._win.local + 1);
+      this._windowTotals(this._win.base);
+      this.spread = at;
+      this.applyTransform(false);
+      return [this.spread, this.total];
+    }
     if (this.spread > 0)
       this.spread--;
     this.applyTransform();
     return [this.spread, this.total];
   }
   goTo(s, animate = true) {
-    this.spread = Math.max(0, Math.min(s, this.total - 1));
+    s = Math.max(0, Math.min(s, this.total - 1));
+    const w = this._win;
+    if (w && (s < w.base || s >= w.base + w.local)) {
+      // A page outside the window: cut a window around the text that page
+      // stands for, then land on the page that holds it.
+      // The element asked for through spreadForEl/spreadForBlock, if it was.
+      const el = this._estEl.get(s);
+      const u = el ? this._unitOfEl(el) : this._unitForSpread(s);
+      this._applyWindow(...this._spanAround(u));
+      this._relayout();
+      this.spread = this._spreadOfShown(el || this._units[u]);
+      this.applyTransform(false);
+      return [this.spread, this.total];
+    }
+    this.spread = s;
     this.applyTransform(animate);
     return [this.spread, this.total];
   }
@@ -4929,8 +5001,8 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
   // monotonically with DOM order under column-fill, so binary-search it.
   currentBlockIndex() {
     if (this.scrollMode) return this._blockIndexAtScroll();
-    const blocks = this._blocks();
-    if (!blocks.length || !this.sw) return 0;
+    const blocks = this._shownBlocks();
+    if (!blocks.length || !this.sw) return this._win ? this._ub[this._win.a] : 0;
     const fLeft = this.flow.getBoundingClientRect().left;
     // Same anchored offset the transform uses, so "what is on screen" and "where
     // we scrolled to" can never disagree.
@@ -4941,7 +5013,7 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
       const mid = (lo + hi) >> 1;
       if (xat(mid) >= winLeft) { ans = mid; hi = mid - 1; } else lo = mid + 1;
     }
-    return ans;
+    return ans + (this._win ? this._ub[this._win.a] : 0);
   }
   // Spread that contains the block with the given global index.
   spreadForBlock(idx) {
@@ -4956,11 +5028,188 @@ ${!this.scrollMode && settings.chapterBreaks !== false ? `.er-flow .er-section[d
     const blocks = this._blocks();
     if (!blocks.length || !this.sw || idx < 0) return 0;
     const el = blocks[Math.min(idx, blocks.length - 1)];
+    if (this._win) return this.spreadForEl(el);
     const x = el.getBoundingClientRect().left - this.flow.getBoundingClientRect().left;
     // Via the column index rather than raw division: the stride is a float, and
     // dividing by it drifts by a whole spread once the error accumulates.
     const k = Math.round(x / (this.sw / (this.cols || 1)));
     return Math.max(0, Math.min(Math.floor(k / (this.cols || 1)), this.total - 1));
+  }
+  // Spread that holds an element of the book (a PDF page marker, a highlight).
+  // In a windowed book an element outside the window gets an estimate, and
+  // goTo() with that number cuts the window around the element itself.
+  spreadForEl(el) {
+    if (this.scrollMode) {
+      const top = el.getBoundingClientRect().top - this.flow.getBoundingClientRect().top;
+      return Math.max(0, Math.min(Math.floor(top / (this.clip.clientHeight || 1)), this.total - 1));
+    }
+    if (!this._win) return Math.max(0, Math.min(this._colOf(el) / (this.cols || 1) | 0, this.total - 1));
+    const u = this._unitOfEl(el);
+    const { a, b } = this._win;
+    if (u >= a && u < b) return this._spreadOfShown(el);
+    const s = Math.max(0, Math.min(this._estSpread(u), this.total - 1));
+    this._estEl.set(s, el);
+    return s;
+  }
+  // The spread number within the window, which is what the layout knows about.
+  get localSpread() { return this.spread - (this._win ? this._win.base : 0); }
+  // ── Long books: a window of the text laid out, not the whole book ────────
+  // CSS columns lay out everything they hold. A thousand-page book is some five
+  // thousand columns, close to two million pixels of flow: on a phone (an 18 MB
+  // PDF on a Xiaomi 14) that took half a minute after the text was ready, held
+  // over a gigabyte in the page's renderer, and every re-layout paid it again.
+  // So a long book keeps all of its nodes — block indices, highlights, search
+  // and footnotes work on the whole book exactly as before — but only a window
+  // of it is displayed; the rest is display:none, which the layout skips. Pages
+  // stay numbered across the whole book: those before and after the window are
+  // estimated from the amount of text and corrected with every window laid out.
+  // Turning past a window's edge brings in the next one, cut exactly where the
+  // last one stopped, so no line is lost or repeated.
+  //
+  // Units are the children of the book's parts (sections, PDF pages): windows
+  // start and end between them, preferably at a part or a heading.
+  _prepWindows() {
+    if (!(this._units && this._units.length && this.flow.contains(this._units[0]))) {
+      const units = [], parts = [];
+      for (const part of Array.from(this.flow.children)) {
+        if (part.tagName === "STYLE" || part.classList.contains("er-end")) continue;
+        const kids = part.tagName === "DIV" ? Array.from(part.children) : [];
+        if (!kids.length) { units.push(part); continue; }
+        parts.push([part, units.length, units.length + kids.length]);
+        units.push(...kids);
+      }
+      const N = units.length;
+      const uw = new Float64Array(N + 1), ub = new Int32Array(N + 1), brk = new Uint8Array(N + 1);
+      for (let i = 0; i < N; i++) {
+        const u = units[i];
+        const pics = (u.tagName === "IMG" ? 1 : 0) + u.getElementsByTagName("img").length;
+        uw[i + 1] = uw[i] + Math.max(1, (u.textContent || "").length + pics * ER_PIC_WEIGHT);
+        ub[i + 1] = ub[i] + (/^(P|H[1-4])$/.test(u.tagName) ? 1 : 0) + u.querySelectorAll("p,h1,h2,h3,h4").length;
+        if (/^H[1-3]$/.test(u.tagName)) brk[i] = 1;
+      }
+      const at = new Map(units.map((u, i) => [u, i]));
+      for (const [part, from] of parts) { brk[from] = 1; at.set(part, from); }
+      brk[0] = brk[N] = 1;
+      Object.assign(this, { _units: units, _parts: parts, _uw: uw, _ub: ub, _brk: brk, _unitAt: at, _allBlocks: null, _per: 0 });
+    }
+    return this._uw[this._units.length] > ER_WINDOW_MIN;
+  }
+  _dropWindows() {
+    this._win = null;
+    if (this.flow) for (const el of Array.from(this.flow.querySelectorAll(".er-off"))) el.classList.remove("er-off");
+  }
+  _applyWindow(a, b) {
+    const units = this._units;
+    for (let i = 0; i < units.length; i++) {
+      const off = i < a || i >= b;
+      if (units[i].classList.contains("er-off") !== off) units[i].classList.toggle("er-off", off);
+    }
+    for (const [part, from, to] of this._parts) part.classList.toggle("er-off", to <= a || from >= b);
+    this._win = { a, b, base: 0, local: 1 };
+    this._estEl = new Map();
+    this._vCache = null;
+    this._blockGeom = null;
+  }
+  // Lay out the window just applied, synchronously, and renumber the pages.
+  // `base`: the number of its first page when it continues the page in front
+  // of the reader — page numbers then run on by one instead of re-estimated.
+  _relayout(base) {
+    this._sizeFigures();
+    this.total = Math.max(1, Math.ceil(this._countColumns() / (this.cols || 1)));
+    this._win.local = this.total;
+    this._windowTotals(base);
+  }
+  _windowTotals(base) {
+    const w = this._win, uw = this._uw, N = this._units.length;
+    if (base == null) w.local = this.total;
+    // Characters per page, from this window. A short window (the end of the
+    // book) says little about it, so the last good figure stands then.
+    const inWin = uw[w.b] - uw[w.a];
+    if (!this._per || inWin >= ER_WINDOW * 0.5) this._per = Math.max(1, inWin / w.local);
+    w.base = base != null ? base : Math.round(uw[w.a] / this._per);
+    this.total = w.base + w.local + Math.round((uw[N] - uw[w.b]) / this._per);
+  }
+  _estSpread(u) {
+    const w = this._win, uw = this._uw;
+    if (u < w.a) return Math.min(w.base - 1, Math.floor(uw[u] / this._per));
+    return w.base + w.local + Math.floor((uw[u] - uw[w.b]) / this._per);
+  }
+  _unitForSpread(s) {
+    const w = this._win, uw = this._uw, N = this._units.length;
+    const target = s < w.base ? s * this._per : uw[w.b] + (s - w.base - w.local) * this._per;
+    let lo = 0, hi = N - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (uw[mid] <= target) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  }
+  _unitOfBlock(i) {
+    const ub = this._ub;
+    let lo = 0, hi = this._units.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (ub[mid + 1] > i) hi = mid; else lo = mid + 1;
+    }
+    return lo;
+  }
+  _unitOfEl(el) {
+    for (let n = el; n && n !== this.flow; n = n.parentElement) {
+      const i = this._unitAt.get(n);
+      if (i != null) return i;
+    }
+    return 0;
+  }
+  _spreadOfShown(el) {
+    return this._win.base + Math.max(0, Math.min(this._colOf(el) / (this.cols || 1) | 0, this._win.local - 1));
+  }
+  // Column an element starts in. Floor, not round: a highlight sits anywhere
+  // across its column; the small margin absorbs a block whose edge measures a
+  // hair left of the column line.
+  _colOf(el) {
+    const x = el.getBoundingClientRect().left - this.flow.getBoundingClientRect().left;
+    return Math.max(0, Math.floor(x / (this.sw / (this.cols || 1)) + 0.02));
+  }
+  // Window bounds: forward from a start, back from an end, or around a unit
+  // with some of the text before it at hand. Cut at a part or heading when one
+  // is near, so a window's last page is rarely a short one.
+  _spanFrom(a) {
+    const uw = this._uw, brk = this._brk, N = this._units.length;
+    let b = a + 1;
+    for (; b < N; b++) {
+      const w = uw[b] - uw[a];
+      if ((w >= ER_WINDOW * 0.8 && brk[b]) || w >= ER_WINDOW * 1.25) break;
+    }
+    return [a, Math.min(b, N)];
+  }
+  _spanTo(b) {
+    const uw = this._uw, brk = this._brk;
+    let a = b - 1;
+    for (; a > 0; a--) {
+      const w = uw[b] - uw[a];
+      if ((w >= ER_WINDOW * 0.8 && brk[a]) || w >= ER_WINDOW * 1.25) break;
+    }
+    return [Math.max(0, a), b];
+  }
+  _spanAround(u) {
+    const uw = this._uw, brk = this._brk;
+    let a = -1, plain = 0;
+    for (let i = u; i >= 0; i--) {
+      const w = uw[u] - uw[i];
+      if (w > ER_WINDOW * 0.4) break;
+      if (w <= ER_WINDOW * 0.25) plain = i;
+      if (brk[i]) { a = i; if (w >= ER_WINDOW * 0.15) break; }
+    }
+    if (a < 0) a = plain;
+    let [, b] = this._spanFrom(a);
+    if (b <= u) b = this._spanFrom(u)[1];
+    return [a, b];
+  }
+  // The blocks laid out right now: all of them, or the window's.
+  _shownBlocks() {
+    if (!this._win) return this._blocks();
+    if (!this._allBlocks) this._allBlocks = Array.from(this._blocks());
+    return this._allBlocks.slice(this._ub[this._win.a], this._ub[this._win.b]);
   }
   // The block element for the given global index (for the resume flash).
   blockEl(idx) {
@@ -6650,6 +6899,10 @@ async function extractPdf(file, app, settings = {}, onProgress, early) {
       }
     }
     if (html) parts.push(`<div class="er-pdf-page-break" data-pdf-page-no="${i}">${html}</div>`);
+    // Drop what pdf.js keeps of the page (fonts, operator lists, decoded
+    // images): read once, never needed again, and on a long book it adds up to
+    // hundreds of megabytes by the last page.
+    page.cleanup();
     if (earlyAt && i >= earlyAt && i < total) {
       earlyAt = 0;
       try { await early.onEarly(erMarkPdfFolios(parts.slice()).join("\n")); }
@@ -7261,7 +7514,7 @@ async function renderVisibleFigures(view) {
   try {
     const flow = view.pager.flow;
     const sw = view.pager.sw || 1;
-    const cur = view.pager.spread;
+    const cur = view.pager.localSpread;
     const fRect = flow.getBoundingClientRect();
     const scrolling = view.pager.scrollMode;
     const distOf = (img) => {
@@ -7271,6 +7524,11 @@ async function renderVisibleFigures(view) {
     };
     const imgs = [...flow.querySelectorAll("img.er-pdf-lazy")];
     for (const img of imgs) {
+      // Outside the window of a long book: nothing to show, nothing to keep.
+      if (img.closest(".er-off")) {
+        if (img.dataset.loaded === "1") { img.removeAttribute("src"); img.dataset.loaded = "0"; }
+        continue;
+      }
       const dist = distOf(img);
       const loaded = img.dataset.loaded === "1";
       const gaveUp = img.dataset.loaded === "skip";
@@ -10578,6 +10836,9 @@ const ReaderView = class extends ItemView {
       if (this.areaEl) this.areaEl.removeClass("er-booting");
       erHideVeil(this);
     }, 3e3);
+    const hasBlock = typeof savedBlock === "number" && savedBlock >= 0;
+    // A long book is laid out around the saved place straight away.
+    this.pager.anchorBlock = hasBlock ? savedBlock : 0;
     const [, total] = await this.pager.build(
       this.areaEl,
       this.bookHtml,
@@ -10585,7 +10846,6 @@ const ReaderView = class extends ItemView {
       0
     );
     this._laidOutWidth = this.pager.builtWidth || w;
-    const hasBlock = typeof savedBlock === "number" && savedBlock >= 0;
     const targetSpread = hasBlock ? this.pager.spreadForBlock(savedBlock) : Math.round(savedPct * Math.max(0, total - 1));
     this._renderFlowHighlights();
     const [cur, tot] = this.pager.jumpTo(targetSpread);
@@ -10607,10 +10867,7 @@ const ReaderView = class extends ItemView {
       if (flow && this.pager.total) {
         const el = flow.querySelector(`[data-pdf-page-no="${pageNo}"]`);
         if (el) {
-          const x = el.getBoundingClientRect().left - flow.getBoundingClientRect().left;
-          const stride = this.pager.sw / (this.pager.cols || 1);
-          const spread = Math.floor(Math.round(x / stride) / (this.pager.cols || 1));
-          const [cur, tot] = this.pager.jumpTo(Math.max(0, Math.min(spread, this.pager.total - 1)));
+          const [cur, tot] = this.pager.jumpTo(this.pager.spreadForEl(el));
           (this.updateUI || this._updateUI).call(this, cur, tot);
           return;
         }
@@ -11409,9 +11666,7 @@ const ReaderView = class extends ItemView {
       });
       return;
     }
-    const rel = span.getBoundingClientRect().left - flow.getBoundingClientRect().left;
-    const spread = Math.max(0, Math.floor(rel / this.pager.sw + 1e-3));
-    const [cur, tot] = this.pager.jumpTo(spread);
+    const [cur, tot] = this.pager.jumpTo(this.pager.spreadForEl(span));
     this.updateUI(cur, tot);
     if (this.file) this.plugin.saveProgress(this.file.path, cur, tot, this.pager.currentBlockIndex());
     this.closePanel();
@@ -12741,6 +12996,8 @@ const ReaderModal = class extends Modal {
         erHideVeil(this);
       }, 3000);
       const keep = erPdfEarlyDone(this, this.file);
+      // A long book is laid out around the saved place straight away.
+      this.pager.anchorBlock = keep != null ? keep : saved && typeof saved.block === "number" ? saved.block : 0;
       await this.pager.build(this.areaEl, this.bookHtml, this.plugin.settings, 0);
       const hasBlock = keep != null || (saved && typeof saved.block === "number" && saved.block >= 0);
       const target = keep != null ? this.pager.spreadForBlock(keep)
@@ -12806,10 +13063,7 @@ const ReaderModal = class extends Modal {
       if (flow && this.pager.total) {
         const el = flow.querySelector(`[data-pdf-page-no="${pageNo}"]`);
         if (el) {
-          const x = el.getBoundingClientRect().left - flow.getBoundingClientRect().left;
-          const stride = this.pager.sw / (this.pager.cols || 1);
-          const spread = Math.floor(Math.round(x / stride) / (this.pager.cols || 1));
-          const [cur, tot] = this.pager.jumpTo(Math.max(0, Math.min(spread, this.pager.total - 1)));
+          const [cur, tot] = this.pager.jumpTo(this.pager.spreadForEl(el));
           (this.updateUI || this._updateUI).call(this, cur, tot);
           return;
         }
