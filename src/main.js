@@ -12464,7 +12464,48 @@ const ReaderModal = class extends Modal {
     root.toggleClass("er-fs", on);
     if (!on) root.removeClass("er-chrome-off");
     else root.addClass("er-chrome-off");
+    this._systemBar(on);
     if (was !== on && this.bookHtml) this._repaginate();
+  }
+  // Hides the phone's status bar while full-screen reading is on and keeps the
+  // page's own clock and battery current instead. Capacitor is what Obsidian's
+  // mobile app runs on; without it (a desktop) only the clock is drawn.
+  _systemBar(hide) {
+    const cap = window.Capacitor && window.Capacitor.Plugins;
+    window.clearInterval(this._fsClock);
+    this._fsClock = null;
+    if (!hide) {
+      if (this._sbHidden) cap?.StatusBar?.show?.().catch(() => { /* nothing to restore */ });
+      this._sbHidden = false;
+      return;
+    }
+    if (!this._sbHidden && cap && cap.StatusBar && cap.StatusBar.hide) {
+      cap.StatusBar.hide().catch(() => { /* the system bar stays; the page line still works */ });
+      this._sbHidden = true;
+    }
+    const tick = () => {
+      if (!this.fsClockEl) return;
+      this.fsClockEl.setText(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }));
+      if (cap && cap.Device && cap.Device.getBatteryInfo) {
+        cap.Device.getBatteryInfo().then((b) => {
+          const lvl = b && typeof b.batteryLevel === "number" ? Math.round(b.batteryLevel * 100) : null;
+          if (this.fsBatEl) this.fsBatEl.setText(lvl == null ? "" : `${lvl}%${b.isCharging ? "\u26A1" : ""}`);
+        }).catch(() => { /* no battery reading, no battery shown */ });
+      }
+    };
+    tick();
+    this._fsClock = window.setInterval(tick, 20000);
+  }
+  // The contents entry the current page belongs to.
+  _chapterAt() {
+    const items = this.tocItems || [];
+    if (!items.length || !this.pager || !this.pager.flow) return "";
+    let b = 0;
+    try { b = this.pager.currentBlockIndex(); } catch { return ""; }
+    let best = null;
+    for (const it of items) if (typeof it.block === "number" && it.block <= b && (!best || it.block >= best.block)) best = it;
+    // A bare number («1», «IV») names nothing; the book's title does.
+    return best && /\p{L}{2}/u.test(best.label) && !/^[IVXLC]+$/i.test(best.label.trim()) ? best.label : "";
   }
   _applyTheme() {
     const t = erTheme(this.plugin.settings);
@@ -12576,6 +12617,14 @@ const ReaderModal = class extends Modal {
     nx.addEventListener("click", () => this._nav("next"));
     // The page number that stays on screen in full-screen mode.
     this.fsLocEl = root.createDiv("er-fs-loc");
+    // Full screen on a phone also hides Android's own status bar (see
+    // _systemBar), so the time moves onto the page, as on an e-reader: the
+    // chapter on the left, the battery and the clock on the right.
+    const fsTop = root.createDiv("er-fs-top");
+    this.fsChEl = fsTop.createSpan("er-fs-ch");
+    const fsRight = fsTop.createSpan("er-fs-right");
+    this.fsBatEl = fsRight.createSpan("er-fs-bat");
+    this.fsClockEl = fsRight.createSpan("er-fs-clock");
     this.overlayEl = root.createDiv("er-overlay");
     this.overlayEl.addEventListener("click", () => this._closePanel());
     this.settPan = root.createDiv("er-panel");
@@ -12879,6 +12928,7 @@ const ReaderModal = class extends Modal {
     if (this.topLocEl) this.topLocEl.setText(`${cur + 1} / ${total} · ${pct}%`);
     erPaintTimeLeft(this);
     if (this.fsLocEl) this.fsLocEl.setText(`${cur + 1} / ${total} · ${pct}%`);
+    if (this.fsChEl && erIsFullscreen(this)) this.fsChEl.setText(this._chapterAt() || erBookTitle(this.file));
     renderVisibleFigures(this);
   }
   _buildSettPanel() {
@@ -13248,6 +13298,7 @@ const ReaderModal = class extends Modal {
     erTtsStop(this);
     erDailyLogFlush(this.plugin);
     stopReadingTimer(this);
+    this._systemBar(false);
     if (this.plugin._openReaderModal === this) this.plugin._openReaderModal = null;
     try { if (!this.plugin._unloading) this.app.saveLocalStorage(ER_OPEN_BOOK_KEY, null); } catch { /* storage is optional */ }
     // The search paint is a document-level highlight; it would outlive the book.

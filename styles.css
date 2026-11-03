@@ -2173,6 +2173,15 @@ body:not(.is-mobile) .er-bot {
 .er-fs .er-fs-loc { display: block; position: absolute; right: 14px; bottom: calc(6px + min(var(--safe-area-inset-bottom, 0px), 96px)); z-index: 5;
   font-size: 11px; font-variant-numeric: tabular-nums; color: var(--er-muted, var(--text-muted)); opacity: .75; pointer-events: none; }
 .er-fs:not(.er-chrome-off) .er-fs-loc { opacity: 0; }
+/* The chapter, battery and clock above the page in full-screen mode, where
+   Android's own status bar is hidden. Same weight as the page number below. */
+.er-fs-top { display: none; }
+.er-fs .er-fs-top { display: flex; gap: 12px; justify-content: space-between; position: absolute; left: 14px; right: 14px;
+  top: calc(5px + max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px), var(--er-extra-top, 0px))); z-index: 5;
+  font-size: 11px; font-variant-numeric: tabular-nums; color: var(--er-muted, var(--text-muted)); opacity: .75; pointer-events: none; }
+.er-fs-ch { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+.er-fs-right { display: flex; gap: 8px; flex-shrink: 0; }
+.er-fs:not(.er-chrome-off) .er-fs-top { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .er-fs .er-top, .er-fs .er-bot { transition: none; } }
 
 /* Autoscroll controls: a small pill at the foot of the page. */
