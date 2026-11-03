@@ -122,9 +122,9 @@ While the voice is being made, a “Preparing the voice…” chip at the foot o
 page says so — tap it to cancel. Eight voices to choose from.
 
 **AI that knows your book.** The ✨ button in the top bar: *Ask about the book* —
-the AI knows the title and sees the page in front of you; *Remind me what
-happened* — a short recap of the last pages, no spoilers, for when you come back
-to a book after a week. With a selection: *Explain the selection*. The answer
+the AI knows the title and sees the page in front of you; *Recap what happened* —
+a short recap of the last pages, no spoilers, for when you come back to a book
+after a week. With a selection: *Break down the selection*. The answer
 saves as a note in one tap. Off until you turn it on.
 
 **Chinese.** The interface is now in Simplified Chinese as well as Russian and
