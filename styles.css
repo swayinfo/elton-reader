@@ -15,6 +15,13 @@
    here to fix. This blue reads on the light, sepia and dark pages alike. */
 ::highlight(er-selection) { background-color: rgba(85, 72, 217, 0.28); }
 .er-eink ::highlight(er-selection) { background-color: rgba(0, 0, 0, 0.22); }
+::highlight(er-menu-sel) { background-color: rgba(85, 72, 217, 0.28); }
+.er-eink ::highlight(er-menu-sel) { background-color: rgba(0, 0, 0, 0.22); }
+/* «Остановился здесь» — отметка читателя, держится до следующей. Rendered with the
+   Custom Highlight API (no DOM change); .er-stop-block is the fallback where it is missing. */
+::highlight(er-stop) { background-color: rgba(255, 170, 0, 0.30); text-decoration: underline 2px rgba(230, 130, 0, 0.9); }
+.er-eink ::highlight(er-stop) { background-color: rgba(0, 0, 0, 0.15); text-decoration: underline 2px #000; }
+.er-stop-block { box-shadow: -4px 0 0 rgba(230, 130, 0, 0.9); }
 /* Allow native text selection on touch devices (Obsidian mobile sets user-select:none globally)
    Reverted to exactly this list on purpose. I widened it to every descendant and
    added a ::selection colour of my own, on a guess that the system highlight was
@@ -67,6 +74,14 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 /* Mobile full-screen reader: no frame, use all the space */
 .er-marea { margin:0; border:none; border-radius:0; box-shadow:none; background:transparent; }
 .er-clip { position:relative; overflow:hidden; flex-shrink:0; }
+/* Paged mode: CLIP, not hidden. `hidden` still lets the browser scroll the box
+   from code — and it does: extending a selection makes Chromium scroll the
+   selection's end into view, and in a book laid out as one wide strip of
+   columns that end is far to the right. Measured on Android 14: one drag of a
+   selection handle to the foot of the page set this box's scrollLeft to
+   275 441px — the view jumped to the last page and the selection ran to the
+   end of the book. `clip` cannot be scrolled at all. */
+.er-clip:not(.er-clip-scroll) { overflow:clip; }
 .er-flow { overflow:hidden; }
 .er-flow p { margin:0 0 .85em; text-align:justify; hyphens:auto; -webkit-hyphens:auto; word-break:break-word; color:inherit; font-size:inherit; font-family:inherit; line-height:inherit; break-inside:avoid-column; }
 .er-flow p:last-child { margin-bottom:0; }
@@ -196,7 +211,7 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-lib-ph { position:absolute; inset:0; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:linear-gradient(145deg,var(--er-lib-card) 0%,var(--er-lib-border) 100%); }
 .er-lib-ph-ext { font-size:10px; font-weight:800; letter-spacing:.1em; color:var(--er-lib-accent,#5548d9); background:color-mix(in srgb,var(--er-lib-accent) 10%,transparent); padding:3px 8px; border-radius:4px; border:1px solid color-mix(in srgb,var(--er-lib-accent) 28%,transparent); }
 .er-lib-ph-init { font-size:34px; font-weight:900; color:var(--er-lib-border); letter-spacing:-.03em; line-height:1; }
-.er-lib-fitbtn { position:absolute; top:9px; right:9px; z-index:4; width:31px; height:31px; display:flex; align-items:center; justify-content:center; border-radius:9px; background:rgba(18,18,28,.55); color:#fff; -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px); border:1px solid rgba(255,255,255,.20); opacity:0; transform:scale(.82); transition:opacity .15s,transform .15s,background .15s; }
+.er-lib-fitbtn { position:absolute; top:9px; right:9px; z-index:4; width:31px; height:31px; display:flex; align-items:center; justify-content:center; border-radius:9px; background:rgba(18,18,28,.78); color:#fff; border:1px solid rgba(255,255,255,.20); opacity:0; transform:scale(.82); transition:opacity .15s,transform .15s,background .15s; }
 .er-lib-card:hover .er-lib-fitbtn { opacity:1; transform:scale(1); }
 .er-lib-fitbtn:hover { background:var(--er-lib-accent); border-color:var(--er-lib-accent); }
 .er-lib-fitbtn:active { transform:scale(.88); }
@@ -204,7 +219,7 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 /* Кнопка действий с книгой — рядом с кнопкой вида обложки. Отдельная кнопка
    нужна потому, что правой кнопки мыши на телефоне нет, а удалять книгу с
    телефона просили так же, как с компьютера. */
-.er-lib-morebtn { position:absolute; top:9px; right:46px; z-index:4; width:31px; height:31px; display:flex; align-items:center; justify-content:center; border-radius:9px; background:rgba(18,18,28,.55); color:#fff; -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px); border:1px solid rgba(255,255,255,.20); opacity:0; transform:scale(.82); transition:opacity .15s,transform .15s,background .15s; cursor:pointer; }
+.er-lib-morebtn { position:absolute; top:9px; right:46px; z-index:4; width:31px; height:31px; display:flex; align-items:center; justify-content:center; border-radius:9px; background:rgba(18,18,28,.78); color:#fff; border:1px solid rgba(255,255,255,.20); opacity:0; transform:scale(.82); transition:opacity .15s,transform .15s,background .15s; cursor:pointer; }
 .er-lib-card:hover .er-lib-morebtn { opacity:1; transform:scale(1); }
 .er-lib-morebtn:hover { background:var(--er-lib-accent); border-color:var(--er-lib-accent); }
 .er-lib-morebtn:active { transform:scale(.88); }
@@ -292,6 +307,11 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
    app.emulateMobile(true) it becomes a real 34px — so the home-bar gap can be
    checked without a phone in hand. */
 .er-bot { padding-bottom:var(--safe-area-inset-bottom, 0px); height:calc(50px + var(--safe-area-inset-bottom, 0px)); }
+/* Capped. On Android Obsidian also puts the on-screen KEYBOARD's height into
+   this variable (measured: 24px normally, 336px with the keyboard up), and the
+   page counter bar grew to 386px under any dialog with a text field, squeezing
+   the book behind it. A home bar or a tablet taskbar (60px measured) is never taller than ~96px; a keyboard always is. */
+.er-bot { padding-bottom:min(var(--safe-area-inset-bottom, 0px), 96px); height:calc(50px + min(var(--safe-area-inset-bottom, 0px), 96px)); }
 
 /* Clear Obsidian's floating status bar on a desktop.
    It is `position: fixed; bottom: 0; right: 0` and sits ON TOP of whatever is in
@@ -346,26 +366,23 @@ body:not(.is-mobile) .er-bot {
 /* На телефоне в панели остаётся ОДНА кнопка, и её легко не заметить —
    подписчики уже жаловались, что панель выскакивает незамеченной. Поэтому там
    она акцентная, а не серая. */
-@media (pointer: coarse) {
-  .er-hl-menu { background: var(--interactive-accent); color: var(--text-on-accent); opacity: 1; }
-  .er-hl-menu svg { color: var(--text-on-accent); }
-}
-.er-hl-copy, .er-hl-note, .er-hl-ai, .er-hl-menu {
+/* (The phone bar carries the colours again, so «⋯» no longer needs to shout.) */
+.er-hl-copy, .er-hl-note, .er-hl-ai, .er-hl-cmt, .er-hl-next, .er-hl-menu {
   background: color-mix(in srgb, var(--er-text) 6%, transparent);
   color: var(--er-text);
   border-color: transparent;
   opacity: .62;
 }
-.er-hl-copy:hover, .er-hl-note:hover, .er-hl-ai:hover, .er-hl-menu:hover {
+.er-hl-copy:hover, .er-hl-note:hover, .er-hl-ai:hover, .er-hl-cmt:hover, .er-hl-next:hover, .er-hl-menu:hover {
   opacity: 1;
   background: color-mix(in srgb, var(--er-text) 12%, transparent);
 }
-.er-hl-copy svg, .er-hl-note svg, .er-hl-ai svg, .er-hl-menu svg {
+.er-hl-copy svg, .er-hl-note svg, .er-hl-ai svg, .er-hl-cmt svg, .er-hl-next svg, .er-hl-menu svg {
   width: 15px; height: 15px; stroke-width: 1.9;
 }
 /* One gap separating the colour swatches from the actions, instead of a margin
    on every other button. */
-.er-hl-copy { margin-left: 10px; }
+.er-hl-popup .er-hl-sw[style] + .er-hl-sw:not([style]) { margin-left: 10px; }
 /* Yes/no confirm dialog (e.g. after exporting quotes to the book note) */
 .er-confirm-modal .er-confirm-title { font-size:1.05em; font-weight:700; margin-bottom:8px; }
 .er-confirm-modal .er-confirm-body { opacity:.85; line-height:1.5; margin-bottom:18px; }
@@ -612,7 +629,7 @@ body:not(.is-mobile) .er-bot {
 .er-set-tab-on { color:var(--text-normal); transform:translateY(2px); border-radius:2px;
   border:2px solid var(--background-modifier-border);
   border-bottom-color:var(--background-primary); }
-.er-set-body .setting-item:first-child { border-top:none; padding-top:0; }
+.er-set-body .setting-item:first-child { border-top:none; }
 /* Section titles inside a settings tab. Small, quiet and letter-spaced rather
    than another line of ordinary text: their job is to break a long list into
    groups you can skim, not to compete with the setting names under them. */
@@ -628,11 +645,41 @@ body:not(.is-mobile) .er-bot {
 }
 .er-set-body h3:first-child { margin-top: 4px; }
 /* Phones: a row of tabs would be unusable, so stack them. */
-.is-mobile .er-set-tabs { flex-direction:column; align-items:stretch; border:none; gap:2px; }
-.is-mobile .er-set-tab { border:none !important; transform:none !important;
-  border-radius:7px; padding:9px 12px; }
+.is-mobile .er-set-tabs { flex-wrap:wrap; align-items:center; border:none; gap:6px; overflow:visible; }
+.is-mobile .er-set-tab { border:1px solid var(--background-modifier-border) !important; transform:none !important;
+  border-radius:999px; padding:6px 12px; font-size:13.5px; }
 .is-mobile .er-set-tab:first-child { margin-left:0; }
-.is-mobile .er-set-tab-on { background:var(--background-modifier-hover); }
+.is-mobile .er-set-tab-on { background:var(--interactive-accent); color:var(--text-on-accent);
+  border-color:var(--interactive-accent) !important; }
+
+/* ── Главная вкладка настроек: приветствие, а не форма ─────────────────────── */
+.er-home { padding: 6px 2px 20px; }
+.er-home-hi { font-size: 24px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em;
+  color: var(--text-normal); text-wrap: balance; }
+.er-home-sub { margin-top: 6px; font-size: 14px; line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+.er-home-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.er-home-acts button { height: auto; min-height: 36px; padding: 8px 16px; font-size: 14px; }
+.is-mobile .er-home-acts button { flex: 1 1 auto; min-height: 44px; }
+.er-home-lang { border-top: none !important; }
+.er-home-lang .setting-item-description { font-size: 12px; }
+
+/* Короткая подсказка под группой настроек — тихая строка, не плашка. */
+.er-set-hint { margin: 10px 0 4px; font-size: 12.5px; line-height: 1.5; color: var(--text-muted); }
+.er-set-hint code { font-size: 11.5px; background: var(--background-modifier-hover); padding: 1px 5px; border-radius: 4px; word-break: break-all; }
+
+/* «Дополнительно» — свёрнутый блок внизу вкладки: всё, что настраивают один раз. */
+.er-set-more { margin-top: 22px; border-top: 1px solid var(--background-modifier-border); }
+.er-set-more > summary { list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 8px; padding: 14px 0 6px;
+  font-size: var(--font-ui-smaller); font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-muted); }
+.er-set-more > summary::-webkit-details-marker { display: none; }
+.er-set-more > summary::before { content: "›"; font-size: 16px; line-height: 1; letter-spacing: 0;
+  transition: transform .15s; display: inline-block; }
+.er-set-more[open] > summary::before { transform: rotate(90deg); }
+.er-set-more > summary:hover { color: var(--text-normal); }
+.er-set-more > summary:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
+.er-set-more-body .setting-item:first-child { border-top: none; }
 
 /* Per-book settings, now living in the reading panel instead of the help dialog.
    They keep their markup but must wear the reader's theme, not Obsidian's. */
@@ -748,6 +795,7 @@ body:not(.is-mobile) .er-bot {
 .er-stats { margin: 2px 0 26px; padding: 18px 18px 14px;
   border: 1px solid var(--background-modifier-border); border-radius: 12px;
   background: var(--background-secondary); }
+.er-stats-none { padding: 14px 16px; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
 .er-stats-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .er-stats-big { font-size: 30px; line-height: 1.1; font-weight: 700;
   color: var(--text-normal); letter-spacing: -0.02em;
@@ -826,77 +874,130 @@ body:not(.is-mobile) .er-bot {
    Заменило полосу 300px у края экрана. Правила ниже приводят к одному виду и
    собственные переключатели окна, и ряды, которые строит общий блок настроек:
    иначе в одном окне соседствовали бы кнопки трёх разных размеров. */
-.er-rs-modal { width: min(760px, 94vw); max-width: 760px; }
-.er-rs { max-height: min(78vh, 760px); overflow-y: auto; overscroll-behavior: contain; padding: 2px 2px 6px; }
-@supports (height: 100dvh) { .er-rs { max-height: min(78dvh, 760px); } }
-.er-rs-title { font-size: 19px; font-weight: 600; margin: 0 0 12px; }
+/* ── Настройки чтения (окно из читалки) ──────────────────────────────────────
+   Вкладки, как в настройках самого плагина: «Текст», «Страница», «Чтение»,
+   «Книга». Раньше всё лежало одной страницей в три колонки и пряталось за
+   прокруткой. Вкладки стоят в одной ячейке сетки — окно держит высоту самой
+   длинной и не прыгает при переключении. */
+.er-rs-modal { width: min(720px, 94vw); max-width: 720px; }
+.er-rs { max-height: min(84vh, 760px); overflow-y: auto; overscroll-behavior: contain; padding: 2px 2px 4px; }
+@supports (height: 100dvh) { .er-rs { max-height: min(84dvh, 760px); } }
+.er-rs-title { font-size: 19px; font-weight: 600; margin: 0 0 10px; }
+
+/* Ряд вкладок с линией под ним, открытая — подчёркнута акцентом. */
+.er-rs-tabs { display: flex; gap: 4px; margin: 0 0 18px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.er-rs-tabs::-webkit-scrollbar { display: none; }
+.er-rs .er-rs-tab { all: unset; box-sizing: border-box; padding: 8px 12px 9px; font-size: 14px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; color: var(--text-muted);
+  box-shadow: inset 0 -2px 0 transparent; transition: color .13s, box-shadow .13s; }
+.er-rs .er-rs-tab:hover { color: var(--text-normal); }
+.er-rs .er-rs-tab:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: -2px; border-radius: 6px; }
+.er-rs .er-rs-tab-on { color: var(--text-normal); box-shadow: inset 0 -2px 0 var(--interactive-accent); }
+
+.er-rs-panes { display: grid; }
+.er-rs-pane { grid-area: 1 / 1; min-width: 0; visibility: hidden; }
+.er-rs-pane-on { visibility: visible; }
+
 .er-rs-preview {
   border: 1px solid var(--background-modifier-border); border-radius: 12px;
-  padding: 14px 16px; margin-bottom: 18px;
+  padding: 12px 16px; margin-bottom: 16px;
   /* Образец: строка всегда внутри рамки. Высота считается от СВОЕГО кегля
      (его ставит _paintPreview), текст центрируется — тогда он не упирается ни
      в верх, ни в низ при любом размере шрифта и межстрочном. */
   display: flex;
   align-items: center;
-  min-height: calc(1.9em + 28px);
+  min-height: calc(1.9em + 24px);
   overflow: hidden;
 }
-.er-rs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; align-items: start; }
+.er-rs-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
 .er-rs-col { min-width: 0; }
-.er-rs-h {
-  font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--text-accent); font-weight: 600;
-  padding-bottom: 6px; margin-bottom: 10px;
-  border-bottom: 1px solid var(--background-modifier-border);
-}
 /* Подпись над переключателем. */
 .er-rs .er-pan-sec {
-  font-size: 12px; color: var(--text-muted); margin: 14px 0 6px;
-  text-transform: none; letter-spacing: 0;
+  font-size: 12px; font-weight: 600; color: var(--text-muted); margin: 16px 0 6px; padding: 0; opacity: 1;
+  text-transform: none; letter-spacing: 0; font-family: inherit;
 }
-.er-rs .er-rs-col > .er-pan-sec:first-of-type { margin-top: 0; }
-/* Равные ячейки — от этого и рассыпались ряды в старой панели: кнопки были
-   разной ширины и последняя переносилась на свою строку. */
+.er-rs .er-rs-col > .er-pan-sec:first-child { margin-top: 0; }
 /* Ячейки равной ширины, но с переносом НА РЯДЫ: втиснутые в одну строку четыре
    кнопки наезжали друг на друга («Светлая»/«Тёмная» слипались, «E-ink» рвалось
    пополам). auto-fit держит ширину одинаковой и переносит лишние вниз. */
 .er-rs .er-col-row, .er-rs .er-theme-row, .er-rs .er-ff-row, .er-rs .er-lh-row {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 6px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 6px; padding: 0; margin: 0;
 }
 /* Числа занимают втрое меньше места, чем слова, — и ряд из них помещается в
-   одну строку вместо двух. */
-.er-rs .er-col-row.er-rs-num { grid-template-columns: repeat(auto-fit, minmax(38px, 1fr)); }
+   одну строку. «Авто» среди них не рвётся на «Авт / о». */
+.er-rs .er-col-row.er-rs-num { grid-template-columns: repeat(auto-fit, minmax(46px, 1fr)); }
+.er-rs .er-col-row.er-rs-num .er-col-btn { white-space: nowrap; overflow-wrap: normal; }
 .er-rs .er-col-btn, .er-rs .er-theme-btn, .er-rs .er-ff-btn, .er-rs .er-lh-btn {
-  min-height: 38px; display: flex; align-items: center; justify-content: center;
+  min-height: 36px; display: flex; align-items: center; justify-content: center;
   padding: 6px 7px; border-radius: 9px; cursor: pointer; font-size: 12.5px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-primary); text-align: center; line-height: 1.15;
   min-width: 0; white-space: normal; overflow-wrap: anywhere; hyphens: none;
 }
+.er-rs .er-col-btn:hover, .er-rs .er-sz-btn:hover { border-color: var(--text-faint); }
 .er-rs .er-col-btn.active, .er-rs .er-theme-btn.active,
 .er-rs .er-ff-btn.active, .er-rs .er-lh-btn.active {
   border-color: var(--interactive-accent); color: var(--interactive-accent); font-weight: 600;
 }
-.er-rs .er-sz-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; }
+.er-rs .er-sz-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; padding: 0; }
 .er-rs .er-sz-btn {
   min-height: 36px; display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--background-modifier-border); border-radius: 9px; cursor: pointer;
 }
-.er-rs .er-sz-label { font-weight: 600; min-width: 56px; text-align: center; }
-.er-rs .er-pan-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.35; }
-.er-rs-foot { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--background-modifier-border); }
-.er-rs .er-hist-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.er-rs .er-act-row { margin-top: 12px; }
+.er-rs .er-sz-label { font-weight: 600; min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+.er-rs .er-pan-hint { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; padding: 0; line-height: 1.4; opacity: 1; font-family: inherit; }
+.er-rs .er-hist-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0; }
+.er-rs .er-hist-empty { grid-column: 1 / -1; color: var(--text-muted); font-size: 12.5px; }
+.er-rs .er-hist-chip { font-family: inherit; color: var(--text-normal); background: var(--background-secondary);
+  border-color: var(--background-modifier-border); font-variant-numeric: tabular-nums; }
+.er-rs .er-hist-chip:hover { border-color: var(--interactive-accent); color: var(--interactive-accent); }
+
+/* Вкладка «Книга»: название сверху, поля друг под другом, сброс — в самом
+   низу, под тем, что он сбрасывает. */
+.er-rs-book { font-size: 13px; font-weight: 600; color: var(--text-normal); margin-bottom: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.er-rs .er-info-group { margin: 14px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0;
+  text-transform: none; color: var(--text-muted); opacity: 1; }
+.er-rs .er-info-booknote { padding: 0; }
+.er-rs .er-info-rowdesc { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+.er-rs .er-panel-input { width: 100%; }
+.er-rs .er-booknote-pick, .er-rs .er-inline-link { color: var(--text-accent); cursor: pointer; font-size: 12.5px; }
+.er-rs .er-rs-reset { margin-top: 14px; }
+.er-rs .er-act-row { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding: 0; }
 .er-rs .er-act-btn {
-  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-family: inherit;
   padding: 8px 14px; border-radius: 9px; border: 1px solid var(--background-modifier-border);
+  background: transparent; color: var(--text-normal);
 }
-/* Телефон: окно становится листом снизу, группы — друг под другом, ячейки
-   крупнее, чтобы попадать пальцем. */
-@media (max-width: 700px) {
+.er-rs .er-act-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.er-rs .er-act-btn svg { width: 15px; height: 15px; }
+.er-rs .er-act-btn:hover { border-color: var(--text-faint); }
+/* Книга длиннее остальных вкладок: на компьютере поля встают в две колонки,
+   чтобы окно не вытягивалось ради одной вкладки. */
+.er-rs-fields { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
+.er-rs-field { min-width: 0; }
+.er-rs-field > .er-info-group { margin-top: 12px; }
+/* Телефон: окно — лист снизу. Вкладки — ровный ряд сегментов во всю ширину,
+   показывается только открытая вкладка (своя высота у каждой), группы — друг
+   под другом, ячейки крупнее, чтобы попадать пальцем. */
+@media (max-width: 700px), (pointer: coarse) {
   .er-rs-modal { width: 100vw; max-width: 100vw; }
-  .er-rs-grid { grid-template-columns: 1fr; gap: 16px; }
   .er-rs { max-height: none; }
+  .er-rs-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; border: none; margin-bottom: 14px;
+    background: var(--background-secondary); border-radius: 10px; padding: 3px; }
+  .er-rs .er-rs-tab, .er-rs .er-rs-tab:first-child { margin: 0; text-align: center; border: none; border-radius: 8px;
+    padding: 8px 4px; font-size: 13.5px; transform: none; }
+  .er-rs .er-rs-tab-on { background: var(--background-primary); border: none; transform: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .er-rs-panes { display: block; }
+  .er-rs-pane { display: none; visibility: visible; }
+  .er-rs-pane-on { display: block; }
+}
+@media (max-width: 700px) {
+  .er-rs-grid, .er-rs-fields { grid-template-columns: 1fr; }
+  .er-rs-grid > .er-rs-col + .er-rs-col > .er-pan-sec:first-child { margin-top: 16px; }
   .er-rs .er-col-btn, .er-rs .er-theme-btn, .er-rs .er-ff-btn,
   .er-rs .er-lh-btn, .er-rs .er-sz-btn { min-height: 44px; font-size: 14px; }
 }
@@ -1115,6 +1216,31 @@ body:not(.is-mobile) .er-bot {
     var(--er-extra-top, 0px)
   );
 }
+/* The same, at a weight Obsidian's phone rule cannot beat. Measured in the
+   phone build of Obsidian 1.14: `.is-phone .modal-content { padding:
+   var(--size-4-4) }` (two classes) out-ranked the one-class rule above, so the
+   book got a flat 16px on every side instead of the status-bar height. That is
+   the toolbar under the clock on Galaxy S23/S26 and the "top inset setting does
+   nothing" report — the setting fed a rule that never applied. */
+/* And the empty header strip above it. Obsidian 1.13+ gives every dialog a
+   `.modal-header` row (40px on a phone) that holds the ✕ we take out; the row
+   itself stayed and pushed the book down. The old 16px padding plus this 40px
+   happened to land the toolbar just under a 52px status bar on a Pixel — and
+   under the clock on any phone with a taller one (S26 Ultra, cut-out screens).
+   Measured on Android 14, Obsidian 1.14.4: header 0–40, content from 40. */
+.modal.er-fullscreen-modal > .modal-header { display: none !important; }
+.modal.er-fullscreen-modal .modal-content.er-fullscreen-content,
+.is-phone .modal.er-fullscreen-modal .modal-content.er-fullscreen-content,
+.is-tablet .modal.er-fullscreen-modal .modal-content.er-fullscreen-content {
+  padding: 0;
+  padding-top: max(
+    var(--safe-area-inset-top, 0px),
+    env(safe-area-inset-top, 0px),
+    var(--er-extra-top, 0px)
+  );
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
 /* The progress line joins the flow instead of floating.
    Floating, it had to be pushed down by the status bar strip — and landed on the
    top bar's own bottom border, so the reader saw two lines a pixel apart. As the
@@ -1158,6 +1284,13 @@ body:not(.is-mobile) .er-bot {
    people think the book (or the plugin) hung, so this shows a page-shaped
    skeleton that breathes instead. */
 .er-view, .er-mview { position: relative; }
+/* The reader's own box never scrolls. Obsidian makes a view's content box
+   scrollable, and a panel sliding in from the edge sticks out of it for a
+   moment: focusing the search field or bringing the current chapter into view
+   then scrolled the whole reader sideways by up to 270px and back — the book
+   jerked every time Contents or Search opened. "clip" (unlike "hidden") cannot
+   be scrolled even from code; older WebKit keeps "hidden". */
+.er-view, .er-mview, .er-fullscreen-content { overflow: hidden !important; overflow: clip !important; }
 .er-veil {
   position: absolute;
   inset: 0;
@@ -1253,7 +1386,7 @@ body:not(.is-mobile) .er-bot {
      палец целиком: пять целей по --er-tap проходят даже по узкому телефону. */
   .er-hl-sw { width: calc(var(--er-tap) - 8px); height: calc(var(--er-tap) - 8px); }
   .er-hl-popup-docked { gap: 5px; }
-  .er-hl-copy svg, .er-hl-note svg, .er-hl-ai svg, .er-hl-menu svg { width: 17px; height: 17px; }
+  .er-hl-copy svg, .er-hl-note svg, .er-hl-ai svg, .er-hl-cmt svg, .er-hl-next svg, .er-hl-menu svg { width: 17px; height: 17px; }
 }
 
 /* Reduced motion drops DECORATION here — the card cascade, the pill sliding in,
@@ -1983,4 +2116,311 @@ body:not(.is-mobile) .er-bot {
   }
   .er-lib-fitbtn svg { width: 13px; height: 13px; }
   .er-lib-fitbtn:active { opacity: 1; }
+}
+
+/* «Продолжить на следующей странице» — only while the selection reaches the
+   end of the page; the rest of the time the bar does not carry it. */
+.er-hl-popup .er-hl-next { display: none; }
+.er-hl-popup.er-hl-can-carry .er-hl-next { display: flex; }
+
+/* Long file names in dialogs wrap instead of running off the right edge (on a
+   phone the dialog then scrolled sideways — a grey bar under the text). */
+.er-info-title, .er-info-sub, .er-setup-row-name { overflow-wrap: anywhere; min-width: 0; }
+.er-setup-modal .modal-content { overflow-x: hidden; }
+
+/* No blur behind the two buttons on a cover. With 30-odd blurred layers over
+   the grid, Chromium on Intel Macs dropped the covers underneath and they
+   blinked in and out as the mouse moved (MacBook Pro 15" 2015, reported with a
+   video). A denser plain background reads the same and costs nothing. */
+.er-lib-fitbtn, .er-lib-morebtn { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* On a phone the library is a tab, and Obsidian already writes "Library" in
+   the tab header right above ours — two titles one under the other. */
+.is-phone .er-lib-as-view .er-lib-title { display: none; }
+
+/* Library: "all files of the vault are shown — pick a books folder". */
+.er-lib-hint { margin: 10px 30px 0; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--er-lib-border, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.er-lib-hint-text { flex: 1 1 260px; font-size: 13px; line-height: 1.45; color: var(--er-lib-text, var(--text-normal)); }
+.er-lib-hint-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 600px) { .er-lib-hint { margin: 8px 14px 0; } }
+/* Pinned book: a small ribbon in the corner of the cover. */
+.er-lib-pin { position: absolute; top: 0; left: 12px; z-index: 3; width: 22px; height: 28px;
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 4px;
+  background: var(--interactive-accent); color: var(--text-on-accent);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%); }
+.er-lib-pin svg { width: 12px; height: 12px; }
+
+/* Paper under the text: a grain or the reader's own picture (stretched/tiled).
+   The page colour stays underneath, so a semi-transparent texture works too. */
+.er-area.er-textured { background-image: var(--er-tex-image); background-size: var(--er-tex-size, auto);
+  background-repeat: var(--er-tex-repeat, repeat); background-position: center; }
+
+/* ── Full-screen reading on a phone ──────────────────────────────────────────
+   The bars leave the layout and float over the page; the page gets the whole
+   height. `er-chrome-off` slides them out of the way. The safe-area padding of
+   the content box keeps the top bar clear of the clock. */
+.er-fullscreen-content.er-fs { position: relative; }
+.er-fs .er-top { position: absolute; left: 0; right: 0; top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px), var(--er-extra-top, 0px)); z-index: 25;
+  transition: transform .24s var(--er-ease-out, ease-out), opacity .24s; }
+.er-fs .er-bot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 25;
+  transition: transform .24s var(--er-ease-out, ease-out), opacity .24s; }
+.er-fs .er-pbar { position: absolute; left: 0; right: 0; top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px), var(--er-extra-top, 0px)); z-index: 26; }
+.er-fs.er-chrome-off .er-top { transform: translateY(-110%); opacity: 0; pointer-events: none; }
+.er-fs.er-chrome-off .er-bot { transform: translateY(110%); opacity: 0; pointer-events: none; }
+.er-fs-loc { display: none; }
+.er-fs .er-fs-loc { display: block; position: absolute; right: 14px; bottom: calc(6px + min(var(--safe-area-inset-bottom, 0px), 96px)); z-index: 5;
+  font-size: 11px; font-variant-numeric: tabular-nums; color: var(--er-muted, var(--text-muted)); opacity: .75; pointer-events: none; }
+.er-fs:not(.er-chrome-off) .er-fs-loc { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .er-fs .er-top, .er-fs .er-bot { transition: none; } }
+
+/* Autoscroll controls: a small pill at the foot of the page. */
+.er-auto-pill { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 30;
+  display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 999px;
+  background: var(--er-ui); border: 1px solid var(--er-border); box-shadow: 0 6px 22px rgba(0,0,0,.18); }
+.er-auto-pill button { min-width: 34px; height: 30px; padding: 0 8px; border-radius: 999px; background: transparent; box-shadow: none; color: var(--er-text); font-size: 15px; }
+.er-auto-pill button:active { transform: scale(.94); }
+.er-auto-lbl { font-size: 12px; color: var(--er-muted); padding: 0 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* PDF running heads and page numbers: kept in the text (positions are counted
+   in paragraphs) but small, quiet and set apart from the reading text. */
+.er-flow p.er-pdf-folio { font-size: .72em; opacity: .45; text-align: center !important; text-indent: 0;
+  margin: 1.2em 0 1.2em; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+
+/* "Original pages" PDF mode: the page picture is the content; its text stays
+   in the flow with no height (contents, search and the saved place use it). */
+.er-flow .er-pdf-orig-text { height: 0; overflow: hidden; margin: 0; padding: 0; }
+.er-flow .er-pdf-orig-text p, .er-flow .er-pdf-orig-text h1, .er-flow .er-pdf-orig-text h2,
+.er-flow .er-pdf-orig-text h3, .er-flow .er-pdf-orig-text h4 { margin: 0; padding: 0; height: 0; line-height: 0; font-size: 0; }
+.er-flow .er-pdf-orig .er-pdf-page-img { border-radius: 4px; }
+
+/* A highlight with a comment: a small speech mark at its end. */
+.er-flow .er-hl.er-hl-cmt-end::after { content: ""; display: inline-block; width: .55em; height: .55em; margin-left: .18em;
+  vertical-align: super; border-radius: 50% 50% 50% 0; background: var(--er-accent, var(--interactive-accent)); opacity: .85; }
+/* The comment shown at the top of the highlight bar. */
+.er-hl-popup.er-hl-popup-cmt { flex-wrap: wrap; max-width: min(340px, calc(100% - 16px)); }
+.er-hl-cmtview { flex: 1 0 100%; order: -1; margin: 0 0 6px; padding: 6px 9px; border-radius: 8px; cursor: pointer;
+  font-size: 12.5px; line-height: 1.45; color: var(--er-text); background: color-mix(in srgb, var(--er-accent) 10%, transparent);
+  border-left: 2px solid var(--er-accent); max-height: 7.5em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* The status-bar height for plugin windows: env() is 0 inside Obsidian's
+   Android WebView, Obsidian's own variable is not (52px on a Pixel). With the
+   keyboard up the AI window was pinned to y=0 and its ✕ sat on the battery. */
+body { --er-safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)); }
+
+/* The library docked in a narrow sidebar: covers only. Readers who keep it in
+   the right panel asked to drop everything but the covers — the header, search
+   and chips took most of the height and the books were not visible. Not on a
+   phone, where the library is the whole screen. */
+body:not(.is-phone) .er-lib { container-type: inline-size; container-name: erlib; }
+@container erlib (max-width: 360px) {
+  .er-lib-hdr, .er-lib-chips, .er-lib-hint { display: none !important; }
+  .er-lib-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)) !important; gap: 10px 8px !important; padding: 10px !important; }
+  .er-lib-info { display: none; }
+  .er-lib-card { border-radius: 8px; }
+  .er-lib-fitbtn, .er-lib-morebtn { display: none; }
+}
+.er-onb-later { margin-top: 6px; font-size: 12px; line-height: 1.45; color: var(--text-muted); text-align: center; padding: 0 12px; }
+
+/* Озвучка: кнопка рядом с таймером. Пока готовится первый кусок — пульсирует,
+   пока звучит — акцентная, звучащий абзац подсвечен мягко. */
+.er-tts-btn.er-tts-on { color: var(--er-accent); background: color-mix(in srgb, var(--er-accent) 12%, transparent); opacity: 1; }
+.er-tts-btn.er-tts-load { animation: er-tts-pulse 1.1s ease-in-out infinite; }
+@keyframes er-tts-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+/* "Preparing the voice…" chip at the bottom of the page while audio is made. */
+.er-tts-wait { position: absolute; left: 50%; bottom: 18px; z-index: 30;
+  display: inline-flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); box-sizing: border-box;
+  padding: 8px 8px 8px 14px; border-radius: 999px; cursor: pointer; user-select: none;
+  background: color-mix(in srgb, var(--er-bg, #faf8f3) 92%, var(--er-accent, #5548d9));
+  color: var(--er-text, #2a2723); border: 1px solid color-mix(in srgb, var(--er-accent, #5548d9) 25%, transparent);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .14); font-size: 13.5px; line-height: 1.2;
+  opacity: 0; transform: translate(-50%, 12px); pointer-events: none;
+  transition: opacity .22s ease-out, transform .22s ease-out; }
+.er-tts-wait.er-tts-wait-on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.er-tts-wait-bars { display: inline-flex; align-items: center; gap: 3px; height: 16px; flex: none; }
+.er-tts-wait-bars span { width: 3px; height: 100%; border-radius: 2px; background: var(--er-accent, #5548d9);
+  transform-origin: center; animation: er-tts-bar .9s ease-in-out infinite alternate; }
+.er-tts-wait-bars span:nth-child(2) { animation-delay: -.3s; }
+.er-tts-wait-bars span:nth-child(3) { animation-delay: -.6s; }
+.er-tts-wait-bars span:nth-child(4) { animation-delay: -.15s; }
+@keyframes er-tts-bar { from { transform: scaleY(.25); } to { transform: scaleY(1); } }
+.er-tts-wait-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.er-tts-wait-x { display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 22px; height: 22px; border-radius: 50%; color: var(--er-muted, #8a857c); }
+.er-tts-wait-x svg { width: 12px; height: 12px; }
+.er-tts-wait:hover .er-tts-wait-x { background: color-mix(in srgb, var(--er-accent, #5548d9) 12%, transparent); color: var(--er-accent, #5548d9); }
+.er-eink .er-tts-wait { background: #fff; color: #000; border-color: #000; box-shadow: none; transition: none; }
+.er-eink .er-tts-wait-bars span { background: #000; animation: none; }
+/* With motion turned off in the system (Windows "Show animations" off counts),
+   the bars do not move but still fade in turn, so the wait stays visible:
+   a change of brightness is not motion. */
+@keyframes er-tts-fade { from { opacity: .25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .er-tts-wait { transition: opacity .22s ease-out; transform: translate(-50%, 0); }
+  .er-tts-wait-bars span { transform: scaleY(.65); animation: er-tts-fade 1.1s ease-in-out infinite alternate; }
+}
+.er-tts-rate { display: none; align-items: center; height: 28px; padding: 0 8px; margin-right: 4px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; user-select: none;
+  color: var(--er-accent); background: color-mix(in srgb, var(--er-accent) 12%, transparent); flex-shrink: 0; }
+.er-tts-rate.er-tts-rate-on { display: inline-flex; }
+.er-tts-rate:active { transform: scale(.94); }
+::highlight(er-tts) { background-color: rgba(85, 72, 217, 0.13); }
+::highlight(er-tts-word) { background-color: rgba(255, 196, 0, 0.55); color: inherit; }
+.er-eink ::highlight(er-tts-word) { background-color: #000; color: #fff; }
+.er-eink ::highlight(er-tts) { background-color: rgba(0, 0, 0, 0.1); }
+
+/* Номер страницы вверху (по желанию): нижняя панель убирается. */
+.er-loc-top .er-bot { display: none; }
+.er-top-loc { display: flex; align-items: center; height: 28px; padding: 0 9px; margin-right: 4px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; flex-shrink: 0;
+  color: var(--er-muted); background: color-mix(in srgb, var(--er-text) 6%, transparent); }
+.er-top-loc:hover { color: var(--er-text); }
+/* Подзаголовок «По желанию» внутри «Дополнительно». */
+.er-set-more-body h3.er-set-sub { margin: 22px 0 4px; }
+/* Markdown-заметка в читалке: служебные элементы рендера — без рамок и кнопок. */
+.er-flow .callout { margin: .8em 0; padding: .6em .9em; border-radius: 8px; border: none; mix-blend-mode: normal;
+  background: color-mix(in srgb, var(--er-accent) 9%, transparent); color: var(--er-text); }
+.er-flow .callout *, .er-flow .callout-title, .er-flow .callout-title-inner { color: var(--er-text) !important; }
+.er-flow .callout-title { display: flex; gap: .4em; align-items: center; font-weight: 600; }
+.er-flow .callout-icon svg { width: 1em; height: 1em; color: var(--er-accent) !important; }
+.er-flow .callout-content p { margin: .3em 0 0; }
+
+/* ── 4.0: notes that point into the book ── an empty span drawn by CSS, so the
+   paragraph's text is untouched. */
+.er-flow .er-bl-mark { display: inline-block; width: 1.05em; height: 1.05em; margin-left: .3em; vertical-align: -.12em;
+  cursor: pointer; border-radius: 4px; text-indent: 0;
+  background: color-mix(in srgb, var(--er-accent) 16%, transparent); }
+.er-flow .er-bl-mark::after { content: ""; display: block; width: 100%; height: 100%;
+  background: var(--er-accent); opacity: .85;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'/><path d='M14 3v6h6'/><path d='M8 13h8M8 17h5'/></svg>") center / 72% no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'/><path d='M14 3v6h6'/><path d='M8 13h8M8 17h5'/></svg>") center / 72% no-repeat; }
+.er-flow .er-bl-mark:hover { background: color-mix(in srgb, var(--er-accent) 28%, transparent); }
+.er-eink .er-flow .er-bl-mark { background: none; outline: 1px solid #000; }
+/* Time left, after the percentage. */
+.er-pct .er-left { font-weight: 500; opacity: .8; }
+/* A feature's own settings, under its switch. */
+.er-set-subopts { margin: -4px 0 6px 18px; padding-left: 12px; border-left: 2px solid var(--background-modifier-border); }
+.er-set-subopts .setting-item { border-top: none; padding-top: 6px; padding-bottom: 6px; }
+
+/* ── «Что нового» — as a phone shows it ───────────────────────────────────
+   A large bold title, a short list (icon in the accent colour, a name, one
+   grey line), one wide button. No tiles, no gradients, no shadows. Theme
+   tokens only, so it is right in light and dark and under any theme. */
+.modal.er-wn2-modal { width: min(420px, 94vw); padding: 0; border-radius: 20px; overflow: hidden; }
+.er-wn2-modal .modal-content { padding: 40px 32px 22px; display: flex; flex-direction: column; align-items: stretch; }
+.er-wn2-title { font-size: 28px; font-weight: 700; line-height: 1.15; letter-spacing: -.02em; text-align: center;
+  color: var(--text-normal); text-wrap: balance; }
+.er-wn2-ver { margin-top: 6px; text-align: center; font-size: 13px; color: var(--text-faint); }
+.er-wn2-viewport { overflow: hidden; margin: 28px -32px 0; touch-action: pan-y; user-select: none; }
+/* Emil Kowalski's rules: only transform and opacity move, a quick ease-out curve
+   (the iOS sheet curve), no bounce; a press gives way a little. */
+.er-wn2-track { display: flex; transition: transform .5s cubic-bezier(.32, .72, 0, 1); will-change: transform; }
+.er-wn2-page { transition: opacity .3s ease-out; }
+.er-wn2-page:not(.is-on) { opacity: .35; }
+.er-wn2-page { flex: 0 0 100%; box-sizing: border-box; padding: 0 32px; display: flex; flex-direction: column; gap: 22px; }
+.er-wn2-row { display: grid; grid-template-columns: 34px 1fr; column-gap: 16px; align-items: start; }
+.er-wn2-icon { color: var(--interactive-accent); padding-top: 2px; }
+.er-wn2-icon svg { width: 28px; height: 28px; stroke-width: 1.6; }
+.er-wn2-name { font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--text-normal); }
+.er-wn2-line { margin-top: 2px; font-size: 14px; line-height: 1.4; color: var(--text-muted); }
+.er-wn2-dots { display: flex; justify-content: center; gap: 8px; margin: 26px 0 18px; min-height: 7px; }
+.er-wn2-modal button.er-wn2-dot { all: unset; cursor: pointer; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-faint); opacity: .45; transition: opacity .2s; }
+.er-wn2-modal button.er-wn2-dot.is-on { opacity: 1; background: var(--text-normal); }
+.er-wn2-modal button.er-wn2-next { width: 100%; height: 48px; border-radius: 12px; font-size: 16px; font-weight: 600;
+  box-shadow: none; transition: transform .16s ease-out, filter .16s ease-out; }
+.er-wn2-modal button.er-wn2-next:active { transform: scale(.97); }
+.er-wn2-modal button.er-wn2-next:hover { filter: brightness(1.06); }
+.er-wn2-modal button.er-wn2-all { all: unset; cursor: pointer; align-self: center; margin-top: 14px; font-size: 13px;
+  color: var(--text-accent); }
+.er-wn2-modal button.er-wn2-all:hover { text-decoration: underline; }
+.er-wn2-modal button.er-wn2-dot:focus-visible, .er-wn2-modal button.er-wn2-all:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { .er-wn2-track, .er-wn2-page, .er-wn2-modal button.er-wn2-next { transition: none; } .er-wn2-modal button.er-wn2-next:active { transform: none; } }
+@media (pointer: coarse) {
+  .modal.er-wn2-modal { width: 100%; border-radius: 20px 20px 0 0; }
+  .er-wn2-modal .modal-content { padding: 36px 26px calc(20px + var(--er-safe-bottom, 0px)); }
+  .er-wn2-viewport { margin: 26px -26px 0; }
+  .er-wn2-page { padding: 0 26px; }
+}
+
+/* «Без панелей» on a computer: the reader view becomes the positioning box
+   for the bars that lie over the text (the phone's full-screen rules). */
+.er-view.er-fs { position: relative; }
+.er-view.er-fs .er-top, .er-view.er-fs .er-bot { transition: transform .28s cubic-bezier(.32, .72, 0, 1), opacity .2s ease-out; }
+.er-view.er-fs .er-pbar { top: 0; }
+
+/* ── Разговор с ИИ, 4.0 — тихо, как у Apple ────────────────────────────────
+   One surface, few lines: a title, the book in grey, the passage as a quoted
+   line, the conversation, and one pill that holds both the field and the send
+   button (so no theme can shift the button off the field). On a computer the
+   window has a fixed size and only the conversation scrolls. Motion: transform
+   and opacity only, a quick ease-out (Emil Kowalski's rules). */
+.modal.er-ai-modal { border-radius: 18px; }
+/* Keyed on Obsidian's own phone/tablet class, not on the pointer: some phones
+   (and the Android emulator) report a "fine" pointer and got the desktop window. */
+body:not(.is-mobile) .modal.er-ai-modal { width: min(720px, 92vw); height: min(640px, 84vh); max-height: none; }
+body:not(.is-mobile) .er-ai-modal .modal-content { height: 100%; box-sizing: border-box; }
+.er-ai-modal .modal-content { padding: 22px 24px 18px; gap: 0; }
+.er-ai-modal .er-ai-head { display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+  padding-right: 36px; min-width: 0; max-width: 100%; overflow: hidden; }
+.er-ai-modal .er-ai-title { font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: var(--text-normal); }
+.er-ai-modal .er-ai-book { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 100%; }
+.er-ai-modal .er-ai-quote { margin: 16px 0 0; padding: 0 0 0 12px; border: none; border-radius: 0;
+  border-left: 2px solid color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+  background: none; color: var(--text-muted); font-size: 13.5px; line-height: 1.5; cursor: pointer;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-height: none; }
+.er-ai-modal .er-ai-quote::after { content: none; }
+.er-ai-modal .er-ai-quote.er-ai-quote-open { display: block; -webkit-line-clamp: unset; max-height: 30vh; overflow-y: auto; }
+.er-ai-modal .er-ai-log { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; display: flex; flex-direction: column;
+  gap: 16px; padding: 20px 2px 12px; }
+.er-ai-modal .er-ai-msg { animation: er-ai-in .22s cubic-bezier(.23, 1, .32, 1) both; }
+@keyframes er-ai-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.er-ai-modal .er-ai-msg-me { align-self: flex-end; max-width: 80%; padding: 8px 13px; border: none;
+  border-radius: 18px 18px 6px 18px; background: var(--background-modifier-hover); color: var(--text-normal);
+  font-size: 14.5px; line-height: 1.45; box-shadow: none; }
+.er-ai-modal .er-ai-msg-ai { padding: 0 2px; border: none; background: none; box-shadow: none;
+  font-size: 15px; line-height: 1.6; color: var(--text-normal); }
+.er-ai-modal .er-ai-msg-ai p:first-child { margin-top: 0; }
+.er-ai-modal .er-ai-msg-ai p:last-child { margin-bottom: 0; }
+.er-ai-modal .er-ai-msg-err { padding: 10px 13px; border: none; border-radius: 12px; font-size: 14px;
+  color: var(--text-error); background: color-mix(in srgb, var(--text-error) 8%, transparent); }
+.er-ai-modal button.er-ai-retry { align-self: flex-start; margin-top: 6px; height: 30px; padding: 0 14px; border-radius: 999px;
+  font-size: 13px; background: transparent; box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+  color: var(--text-normal); transition: transform .16s ease-out; }
+.er-ai-modal button.er-ai-retry:active { transform: scale(.97); }
+.er-ai-modal .er-ai-typing-text { color: var(--text-faint); font-size: 13px; }
+.er-ai-modal .er-ai-acts { display: flex; gap: 2px; margin-top: 6px; }
+.er-ai-modal button.er-ai-act { height: 28px; padding: 0 10px; border-radius: 999px; background: transparent; box-shadow: none;
+  color: var(--text-muted); font-size: 12.5px; transition: background .15s ease-out, transform .16s ease-out; }
+.er-ai-modal button.er-ai-act:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.er-ai-modal button.er-ai-act:active { transform: scale(.97); }
+/* The pill: field and button side by side inside one rounded line. */
+.er-ai-modal .er-ai-bar { position: static; flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  margin-top: 8px; padding: 5px 5px 5px 18px; border: 1px solid var(--background-modifier-border); border-top-width: 1px;
+  border-radius: 999px; background: var(--background-primary); transition: border-color .15s ease-out; }
+.er-ai-modal .er-ai-bar:focus-within { border-color: var(--interactive-accent); }
+.er-ai-modal input.er-ai-input { flex: 1 1 auto; min-width: 0; height: 36px; margin: 0; padding: 0;
+  border: none !important; border-radius: 0; background: transparent !important; box-shadow: none !important;
+  font-size: 15px; color: var(--text-normal); }
+.er-ai-modal button.er-ai-send { position: static; flex: 0 0 auto; width: 36px; height: 36px; margin: 0; padding: 0;
+  border-radius: 50%; display: grid; place-items: center; background: var(--interactive-accent); color: var(--text-on-accent);
+  border: none; box-shadow: none; transition: transform .16s ease-out, opacity .15s ease-out; }
+.er-ai-modal button.er-ai-send svg { width: 16px; height: 16px; }
+.er-ai-modal button.er-ai-send:active { transform: scale(.94); }
+.er-ai-modal .er-ai-bar:has(input:placeholder-shown) button.er-ai-send { opacity: .4; }
+/* Phone: the window is a sheet; keep Obsidian's mobile padding, the home bar
+   gap under the field, and finger-sized controls. */
+.is-mobile .modal.er-ai-modal { width: 100%; height: var(--er-sheet); }
+.is-mobile .er-ai-modal .modal-content { height: 100%; box-sizing: border-box; padding: var(--er-pad);
+  padding-bottom: calc(var(--er-pad) + var(--er-safe-bottom)); }
+.is-mobile .er-ai-modal input.er-ai-input { height: 40px; font-size: 16px; }
+.is-mobile .er-ai-modal button.er-ai-send { width: 40px; height: 40px; }
+.er-ai-modal .er-ai-empty-title { font-size: 17px; font-weight: 600; }
+.er-ai-modal button.er-ai-chip { border-radius: 999px; padding: 7px 16px; background: transparent;
+  box-shadow: inset 0 0 0 1px var(--background-modifier-border); }
+@media (prefers-reduced-motion: reduce) {
+  .er-ai-modal .er-ai-msg { animation: none; }
+  .er-ai-modal button.er-ai-send, .er-ai-modal button.er-ai-act, .er-ai-modal button.er-ai-retry, .er-ai-modal .er-ai-bar { transition: none; }
 }

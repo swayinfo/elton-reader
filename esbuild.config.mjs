@@ -46,6 +46,10 @@ var c=reader.cancel(v);reader.releaseLock();return c.then(function(){return{valu
 throw:function(e){reader.releaseLock();return Promise.reject(e)}};};
 Object.defineProperty(RS.prototype,"values",{value:values,writable:true,configurable:true});
 Object.defineProperty(RS.prototype,Symbol.asyncIterator,{value:values,writable:true,configurable:true})}catch(e){}})();
+(function(){try{if(typeof Promise.withResolvers!=="function"){Object.defineProperty(Promise,"withResolvers",{value:function(){
+var a,b;var p=new this(function(r,j){a=r;b=j});return{promise:p,resolve:a,reject:b}},writable:true,configurable:true})}}catch(e){}})();
+(function(){try{var U=globalThis.Uint8Array;if(U&&typeof U.prototype.toHex!=="function"){Object.defineProperty(U.prototype,"toHex",{value:function(){
+var s="";for(var i=0;i<this.length;i++){s+=(this[i]<16?"0":"")+this[i].toString(16)}return s},writable:true,configurable:true})}}catch(e){}})();
 `;
 
 const banner = `/*
