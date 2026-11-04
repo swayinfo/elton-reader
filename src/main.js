@@ -9898,6 +9898,12 @@ function bookNoteAction(settings, bookPath) {
   if (s.autoBookNote) return asked[bookPath] ? "prompted" : "auto";
   return asked[bookPath] ? "prompted" : "ask";
 }
+// 4.1.1
+Object.assign(__erEN, { "«Что нового» при любом обновлении внутри 4.x показывает всю историю с 4.0 — с карточками": "What’s new shows the whole story since 4.0, with its cards, on any 4.x update" });
+Object.assign(__erZH, { "«Что нового» при любом обновлении внутри 4.x показывает всю историю с 4.0 — с карточками": "在 4.x 内任何一次更新后，“新功能”都会展示自 4.0 以来的全部内容和卡片" });
+// 4.1.0 card
+Object.assign(__erEN, { "Баланс и пополнение": "Balance and top-up", "Остаток Elton AI и пополнение на любую сумму — прямо в настройках.": "Your Elton AI balance, and a top-up for any amount, right in the settings." });
+Object.assign(__erZH, { "Баланс и пополнение": "余额与充值", "Остаток Elton AI и пополнение на любую сумму — прямо в настройках.": "在设置中直接查看 Elton AI 余额，并可充值任意金额。" });
 // 4.1.0
 Object.assign(__erEN, { "Баланс Elton AI и пополнение прямо в настройках («ИИ, голос и перевод»): любая сумма от 100 до 50 000 ₽, оплата картой через Prodamus — деньги приходят на ключ сами": "The Elton AI balance and a top-up right in the settings (“AI, voice and translation”): any amount from 100 to 50,000 ₽, paid by card through Prodamus — the money lands on the key by itself" });
 Object.assign(__erZH, { "Баланс Elton AI и пополнение прямо в настройках («ИИ, голос и перевод»): любая сумма от 100 до 50 000 ₽, оплата картой через Prodamus — деньги приходят на ключ сами": "设置中（“AI、语音和翻译”）直接显示 Elton AI 余额并可充值：100–50,000 ₽ 任意金额，通过 Prodamus 用银行卡支付——款项自动到账至密钥" });
@@ -10015,6 +10021,9 @@ Object.assign(__erZH, {
   "Свой шрифт, поля, фактура или картинка под текстом.": "自定义字体、页边距、纹理或文字下的图片。"
 });
 const WHATS_NEW = [
+  { v: "4.1.1", items: [
+    __ertr("«Что нового» при любом обновлении внутри 4.x показывает всю историю с 4.0 — с карточками")
+  ] },
   { v: "4.1.0", items: [
     __ertr("Баланс Elton AI и пополнение прямо в настройках («ИИ, голос и перевод»): любая сумма от 100 до 50 000 ₽, оплата картой через Prodamus — деньги приходят на ключ сами")
   ] },
@@ -10141,14 +10150,14 @@ function cmpVer(a, b) {
   }
   return 0;
 }
-// A fix release (4.0.2) still tells the whole story of its line (4.0.0 on):
+// Any 4.x update still tells the whole story of its major line (4.0.0 on):
 // someone who got 4.0.0 and missed its window, or updated 4.0.0 → 4.0.1 and
 // saw one line about a label, would otherwise never learn what 4.0 brought.
 // Nothing is shown when the version did not change.
 function whatsNewSince(lastSeen, current, log) {
   if (lastSeen && cmpVer(current, lastSeen) <= 0) return [];
-  const [ma, mi] = String(current).split(".");
-  const lineStart = `${ma}.${mi || 0}.0`;
+  const [ma] = String(current).split(".");
+  const lineStart = `${ma}.0.0`;
   return (log || WHATS_NEW).filter((r) => cmpVer(r.v, current) <= 0 && (cmpVer(r.v, lastSeen) > 0 || cmpVer(r.v, lineStart) >= 0));
 }
 // Список изменений остаётся в хранилище заметкой.
@@ -10183,6 +10192,9 @@ ${body}
 // «Что нового» карточками: одна мысль — одна карточка.
 // Ordered by how much each one surprises a reader: the biggest wow first.
 const WHATS_NEW_SLIDES = {
+  "4.1.0": [
+    { icon: "wallet", title: "Баланс и пополнение", text: "Остаток Elton AI и пополнение на любую сумму — прямо в настройках." },
+  ],
   "4.0.0": [
     { icon: "volume-2", title: "Чтение вслух", text: "Живой голос Elton AI, звучащее слово подсвечено." },
     { icon: "sparkles", title: "ИИ знает вашу книгу", text: "Спросите о книге или попросите напомнить, что было." },
@@ -10208,8 +10220,9 @@ const WhatsNewModal = class extends Modal {
   onOpen() {
     // Cards of the newest release that has them: someone coming from 3.x to a
     // 4.0.x fix release must still get the 4.0 story, not a bare list.
-    const withCards = (this.releases || []).find((r) => (WHATS_NEW_SLIDES[r.v] || []).length);
-    if (withCards) this._renderCards(WHATS_NEW_SLIDES[withCards.v], this.releases[0].v);
+    // Every release in the window brings its cards, newest first.
+    const cards = (this.releases || []).flatMap((r) => WHATS_NEW_SLIDES[r.v] || []);
+    if (cards.length) this._renderCards(cards, this.releases[0].v);
     else this._renderList();
   }
   // The way a phone presents what is new: a large title, a short list — an
