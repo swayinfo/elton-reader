@@ -2424,3 +2424,13 @@ body:not(.is-mobile) .er-ai-modal .modal-content { height: 100%; box-sizing: bor
   .er-ai-modal .er-ai-msg { animation: none; }
   .er-ai-modal button.er-ai-send, .er-ai-modal button.er-ai-act, .er-ai-modal button.er-ai-retry, .er-ai-modal .er-ai-bar { transition: none; }
 }
+
+/* Elton AI top-up window */
+.er-topup-modal .er-topup-desc { color: var(--text-muted); margin: 4px 0 14px; line-height: 1.45; }
+.er-topup-modal .er-topup-input { width: 100%; font-size: 20px; padding: 8px 12px; height: auto; }
+.er-topup-modal .er-topup-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }
+.er-topup-modal .er-topup-chips button { flex: 1 1 0; min-width: 72px; }
+.er-topup-modal .er-topup-go { width: 100%; }
+.er-topup-modal .er-topup-status { margin-top: 12px; min-height: 1.4em; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
+.er-topup-modal .er-topup-mail { margin: 0 0 14px; }
+.er-topup-modal .er-topup-mail-hint { font-size: 13px; line-height: 1.45; margin-bottom: 8px; }

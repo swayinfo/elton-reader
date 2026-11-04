@@ -89,6 +89,7 @@ until you turn it on or enter a key:
 | Translate a selection | Google Translate (`translate.googleapis.com`) | Only the passage you selected | **Off** |
 | Words → flashcards | Google Translate (`translate.googleapis.com`) | Only the word you add | **Off** |
 | Read aloud | Elton AI (`api.eltonlabs.org`, fallback `api.eltonlabs.ru`) | The text being read | **Off** until an Elton AI key is entered |
+| Elton AI balance and top-up | Elton AI (`api.eltonlabs.org` / `.ru` for the balance, `base.eltonlabs.org` for a payment link) | Your Elton AI key and the amount you chose; the payment itself happens on the Prodamus page in your browser | Only when an Elton AI key is in use; a payment only when you press **Top up** |
 | AI about the book, passage breakdown | The service **you** pick — Elton AI (`api.eltonlabs.org`), OpenRouter, OpenAI, or a local Ollama / LM Studio | Your question, the book's title and the passage or the page on screen | **Off** |
 
 They live in *Settings → Features → AI, voice and translation*, and each says
@@ -106,6 +107,10 @@ No account is required for the plugin itself, and there is no telemetry, no
 analytics and no ads.
 
 ---
+
+## What's new in 4.1
+
+**Elton AI balance and top-up in the settings.** With Elton AI in use, *Settings → Features → AI, voice and translation* shows what is left on the key, and **Top up** pays any amount from 100 to 50,000 ₽ by card through Prodamus. The money lands on the key by itself; a key that has no e-mail yet asks for one (the receipt goes there).
 
 ## What's new in 4.0
 
@@ -405,6 +410,7 @@ Obsidian.
 | Перевод выделенного | Google Translate (`translate.googleapis.com`) | Только выделенный вами фрагмент | **Выключено** |
 | Слова в карточки | Google Translate (`translate.googleapis.com`) | Только добавляемое слово | **Выключено** |
 | Чтение вслух | Elton AI (`api.eltonlabs.org`, запасной `api.eltonlabs.ru`) | Текст, который читается | **Выключено**, пока не введён ключ Elton AI |
+| Баланс и пополнение Elton AI | Elton AI (`api.eltonlabs.org` / `.ru` — баланс, `base.eltonlabs.org` — ссылка на оплату) | Ваш ключ Elton AI и выбранная сумма; сама оплата — на странице Prodamus в браузере | Только при ключе Elton AI; платёж — только по кнопке **Пополнить** |
 | ИИ о книге, разбор фрагмента | Тот сервис, который **вы** выберете — Elton AI (`api.eltonlabs.org`), OpenRouter, OpenAI или локальный Ollama / LM Studio | Ваш вопрос, название книги и фрагмент или страница на экране | **Выключено** |
 
 Всё это — в *Настройки → Функции → ИИ, голос и перевод*, и у каждой функции то
@@ -422,6 +428,10 @@ Obsidian.
 Аккаунт для самого плагина не нужен. Ни телеметрии, ни аналитики, ни рекламы.
 
 ---
+
+## Что нового в 4.1
+
+**Баланс и пополнение Elton AI в настройках.** Когда используется Elton AI, в *Настройки → Функции → ИИ, голос и перевод* виден остаток на ключе, а кнопка **Пополнить** оплачивает любую сумму от 100 до 50 000 ₽ картой через Prodamus. Деньги приходят на ключ сами; если у ключа ещё нет почты, окно попросит её — туда придёт чек.
 
 ## Что нового в 4.0
 

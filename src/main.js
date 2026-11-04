@@ -1732,6 +1732,132 @@ function erTtsPaint(view) {
   b.setAttribute("aria-label", t ? __ertr("Остановить озвучку") : __ertr("Озвучить: выделенное или с этой страницы"));
   erTtsWait(view, !!(t && !t.playing), !!(t && t.played));
 }
+// ── Elton AI balance and top-up ─────────────────────────────────────────────
+// The balance is read from the same proxy the voice uses. A top-up asks the
+// Elton AI billing service for a Prodamus payment link bound to this key, for
+// any amount within its limits; the key goes only to Elton AI's own server,
+// the browser gets the link. The money lands on the key once paid — the
+// settings watch the balance and say so.
+const ER_TOPUP_URL = "https://base.eltonlabs.org/api/key/topup-direct";
+const ER_TOPUP_MIN = 100, ER_TOPUP_MAX = 50000;
+function erFmtRub(v) {
+  return (Math.floor(Number(v) * 100) / 100).toLocaleString(erLocale(), { maximumFractionDigits: 2 }) + " ₽";
+}
+async function erEltonBalance(key) {
+  const k = await erEltonProbe(key);
+  const r = await requestUrl({ url: ER_TTS_HOSTS[k] + "/balance", headers: { Authorization: "Bearer " + key }, throw: false });
+  let v = null;
+  try { v = Number(r.json && r.json.balance); } catch { /* not JSON */ }
+  return r.status === 200 && Number.isFinite(v) ? v : null;
+}
+function erBalanceRow(tab, c) {
+  const key = erTtsKey(tab.plugin.settings);
+  const row = new Setting(c).setName(__ertr("Баланс Elton AI")).setDesc(__ertr("Загружаю…"));
+  const paint = async () => {
+    row.setDesc(__ertr("Загружаю…"));
+    let v = null;
+    try { v = await erEltonBalance(key); } catch { /* offline */ }
+    row.setDesc(v == null ? __ertr("Не удалось узнать баланс — проверьте ключ и интернет.") : __ertr("Осталось {0}", erFmtRub(v)));
+    return v;
+  };
+  row.addExtraButton((b) => b.setIcon("refresh-cw").setTooltip(__ertr("Обновить")).onClick(() => { paint(); }));
+  row.addButton((b) => b.setButtonText(__ertr("Пополнить")).setCta().onClick(() => new ErTopupModal(tab.app, key, paint).open()));
+  paint();
+}
+const ErTopupModal = class extends Modal {
+  constructor(app, key, onPaid) {
+    super(app);
+    this.key = key;
+    this.onPaid = onPaid;
+    this.timer = 0;
+  }
+  onOpen() {
+    const c = this.contentEl;
+    c.empty();
+    this.modalEl.addClass("er-topup-modal");
+    c.createEl("h3", { text: __ertr("Пополнить баланс Elton AI") });
+    c.createEl("p", { cls: "er-topup-desc", text: __ertr("Любая сумма от {0} до {1} ₽. Оплата картой через Prodamus — деньги придут на этот ключ сами.", ER_TOPUP_MIN, ER_TOPUP_MAX.toLocaleString(erLocale())) });
+    const inp = c.createEl("input", { cls: "er-topup-input", attr: { type: "number", min: String(ER_TOPUP_MIN), max: String(ER_TOPUP_MAX), step: "1", placeholder: __ertr("Сумма, ₽"), inputmode: "numeric" } });
+    inp.value = "500";
+    const chips = c.createDiv("er-topup-chips");
+    for (const a of [300, 500, 1000, 2000]) {
+      const b = chips.createEl("button", { text: a.toLocaleString(erLocale()) + " ₽" });
+      b.addEventListener("click", () => { inp.value = String(a); inp.focus(); });
+    }
+    // Asked for only when the key has no e-mail yet (keys issued by the bot):
+    // the payment is credited by address, and the receipt goes there too.
+    const mailBox = c.createDiv("er-topup-mail");
+    mailBox.hide();
+    mailBox.createDiv({ cls: "er-topup-mail-hint", text: __ertr("У этого ключа ещё нет почты. Укажите её — туда придёт чек, и к ней привяжется ключ.") });
+    this.mail = mailBox.createEl("input", { cls: "er-topup-input", attr: { type: "email", placeholder: "you@example.com", autocomplete: "email" } });
+    this.mailBox = mailBox;
+    const go = c.createEl("button", { cls: "mod-cta er-topup-go", text: __ertr("Перейти к оплате") });
+    this.status = c.createDiv("er-topup-status");
+    this.mail.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+    const submit = () => this.pay(Math.round(Number(inp.value)), go);
+    go.addEventListener("click", submit);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+    erAutoFocus(inp, 30);
+  }
+  async pay(amount, go) {
+    if (!Number.isFinite(amount) || amount < ER_TOPUP_MIN || amount > ER_TOPUP_MAX) {
+      this.status.setText(__ertr("Сумма — от {0} до {1} ₽.", ER_TOPUP_MIN, ER_TOPUP_MAX.toLocaleString(erLocale())));
+      return;
+    }
+    go.disabled = true;
+    this.status.setText(__ertr("Создаю платёж…"));
+    let before = null;
+    try { before = await erEltonBalance(this.key); } catch { /* unknown */ }
+    let j = null;
+    try {
+      // requestUrl has no timeout of its own; a route that drops the packets
+      // (some VPNs to this server) would leave the window waiting forever.
+      const r = await Promise.race([
+        requestUrl({ url: ER_TOPUP_URL, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(this.mailBox.isShown() && this.mail.value.trim() ? { token: this.key, amount, email: this.mail.value.trim() } : { token: this.key, amount }), throw: false }),
+        new Promise((_, rej) => window.setTimeout(() => rej(new Error("timeout")), 20000))
+      ]);
+      j = r.json;
+    } catch (e) { j = { error: (e && e.message) || String(e) }; }
+    go.disabled = false;
+    if (!j || !j.url) {
+      const err = j && j.error;
+      if (err === "no_email") {
+        this.mailBox.show();
+        this.mail.focus();
+        this.status.setText(this.mail.value.trim() ? __ertr("Проверьте почту.") : "");
+        return;
+      }
+      this.status.setText(err === "timeout" ? __ertr("Сервер оплаты не отвечает. Если включён VPN, попробуйте без него.")
+        : err === "bad_email" ? __ertr("Проверьте почту.")
+        : err === "email_taken" ? __ertr("Эта почта уже привязана к другому ключу Elton AI. Укажите другую или пополните тот ключ.")
+        : err === "too_many" ? __ertr("Слишком много попыток. Попробуйте через час.")
+        : err === "bad_token" ? __ertr("Ключ Elton AI не подошёл")
+        : err === "bad_amount" ? __ertr("Сумма — от {0} до {1} ₽.", (j.min || ER_TOPUP_MIN), (j.max || ER_TOPUP_MAX).toLocaleString(erLocale()))
+        : __ertr("Не удалось создать платёж: {0}", err || "—"));
+      return;
+    }
+    window.open(j.url);
+    this.status.setText(__ertr("Страница оплаты открыта в браузере. Баланс обновится здесь, как только деньги придут."));
+    // Watch for the money for up to 15 minutes while this window is open.
+    const start = Date.now();
+    window.clearInterval(this.timer);
+    this.timer = window.setInterval(async () => {
+      if (Date.now() - start > 15 * 60e3) { window.clearInterval(this.timer); return; }
+      let v = null;
+      try { v = await erEltonBalance(this.key); } catch { return; }
+      if (v != null && before != null && v > before + 0.5) {
+        window.clearInterval(this.timer);
+        new Notice(__ertr("Баланс пополнен: {0}", erFmtRub(v)), 8e3);
+        if (this.onPaid) this.onPaid();
+        this.close();
+      }
+    }, 10e3);
+  }
+  onClose() {
+    window.clearInterval(this.timer);
+    this.contentEl.empty();
+  }
+};
 // While the voice is being made (a few seconds before the first word, and on a
 // slow connection between pieces) a chip on the page says so — a pulsing
 // button alone looked like nothing was happening. Tapping it stops the reading.
@@ -9772,6 +9898,59 @@ function bookNoteAction(settings, bookPath) {
   if (s.autoBookNote) return asked[bookPath] ? "prompted" : "auto";
   return asked[bookPath] ? "prompted" : "ask";
 }
+// 4.1.0
+Object.assign(__erEN, { "Баланс Elton AI и пополнение прямо в настройках («ИИ, голос и перевод»): любая сумма от 100 до 50 000 ₽, оплата картой через Prodamus — деньги приходят на ключ сами": "The Elton AI balance and a top-up right in the settings (“AI, voice and translation”): any amount from 100 to 50,000 ₽, paid by card through Prodamus — the money lands on the key by itself" });
+Object.assign(__erZH, { "Баланс Elton AI и пополнение прямо в настройках («ИИ, голос и перевод»): любая сумма от 100 до 50 000 ₽, оплата картой через Prodamus — деньги приходят на ключ сами": "设置中（“AI、语音和翻译”）直接显示 Elton AI 余额并可充值：100–50,000 ₽ 任意金额，通过 Prodamus 用银行卡支付——款项自动到账至密钥" });
+// Elton AI top-up: e-mail for keys without one
+Object.assign(__erEN, {
+  "У этого ключа ещё нет почты. Укажите её — туда придёт чек, и к ней привяжется ключ.": "This key has no e-mail yet. Enter one — the receipt goes there and the key gets linked to it.",
+  "Проверьте почту.": "Check the e-mail address.",
+  "Эта почта уже привязана к другому ключу Elton AI. Укажите другую или пополните тот ключ.": "This e-mail is already linked to another Elton AI key. Use a different one, or top up that key.",
+  "Слишком много попыток. Попробуйте через час.": "Too many attempts. Try again in an hour."
+});
+Object.assign(__erZH, {
+  "У этого ключа ещё нет почты. Укажите её — туда придёт чек, и к ней привяжется ключ.": "此密钥尚未绑定邮箱。请填写邮箱——收据会发送到该邮箱，密钥也会与它绑定。",
+  "Проверьте почту.": "请检查邮箱地址。",
+  "Эта почта уже привязана к другому ключу Elton AI. Укажите другую или пополните тот ключ.": "此邮箱已绑定另一个 Elton AI 密钥。请换一个邮箱，或为那个密钥充值。",
+  "Слишком много попыток. Попробуйте через час.": "尝试次数过多，请一小时后再试。"
+});
+// Elton AI balance and top-up
+Object.assign(__erEN, {
+  "Баланс Elton AI": "Elton AI balance",
+  "Загружаю…": "Loading…",
+  "Не удалось узнать баланс — проверьте ключ и интернет.": "Could not get the balance — check the key and the connection.",
+  "Осталось {0}": "{0} left",
+  "Обновить": "Refresh",
+  "Пополнить": "Top up",
+  "Пополнить баланс Elton AI": "Top up your Elton AI balance",
+  "Любая сумма от {0} до {1} ₽. Оплата картой через Prodamus — деньги придут на этот ключ сами.": "Any amount from {0} to {1} ₽. Pay by card through Prodamus — the money lands on this key by itself.",
+  "Сумма, ₽": "Amount, ₽",
+  "Перейти к оплате": "Go to payment",
+  "Сумма — от {0} до {1} ₽.": "The amount must be from {0} to {1} ₽.",
+  "Создаю платёж…": "Creating the payment…",
+  "Не удалось создать платёж: {0}": "Could not create the payment: {0}",
+  "Страница оплаты открыта в браузере. Баланс обновится здесь, как только деньги придут.": "The payment page is open in your browser. The balance updates here as soon as the money arrives.",
+  "Баланс пополнен: {0}": "Balance topped up: {0}",
+  "Сервер оплаты не отвечает. Если включён VPN, попробуйте без него.": "The payment server does not answer. If a VPN is on, try without it."
+});
+Object.assign(__erZH, {
+  "Баланс Elton AI": "Elton AI 余额",
+  "Загружаю…": "加载中…",
+  "Не удалось узнать баланс — проверьте ключ и интернет.": "无法获取余额——请检查密钥和网络。",
+  "Осталось {0}": "剩余 {0}",
+  "Обновить": "刷新",
+  "Пополнить": "充值",
+  "Пополнить баланс Elton AI": "为 Elton AI 余额充值",
+  "Любая сумма от {0} до {1} ₽. Оплата картой через Prodamus — деньги придут на этот ключ сами.": "可充值 {0}–{1} ₽ 之间的任意金额。通过 Prodamus 用银行卡支付，款项会自动到账至此密钥。",
+  "Сумма, ₽": "金额（₽）",
+  "Перейти к оплате": "前往支付",
+  "Сумма — от {0} до {1} ₽.": "金额需在 {0}–{1} ₽ 之间。",
+  "Создаю платёж…": "正在创建支付…",
+  "Не удалось создать платёж: {0}": "无法创建支付：{0}",
+  "Страница оплаты открыта в браузере. Баланс обновится здесь, как только деньги придут.": "支付页面已在浏览器中打开。款项到账后，这里的余额会自动更新。",
+  "Баланс пополнен: {0}": "余额已充值：{0}",
+  "Сервер оплаты не отвечает. Если включён VPN, попробуйте без него.": "支付服务器无响应。如果开启了 VPN，请关闭后再试。"
+});
 // 4.0.2
 Object.assign(__erEN, { "Окно «Что нового» снова рассказывает обо всём, что появилось в 4.0, — и тем, кто обновился с 4.0.0 или 4.0.1": "The What’s new window again tells you everything that came in 4.0 — also if you updated from 4.0.0 or 4.0.1" });
 Object.assign(__erZH, { "Окно «Что нового» снова рассказывает обо всём, что появилось в 4.0, — и тем, кто обновился с 4.0.0 или 4.0.1": "“新功能”窗口重新介绍 4.0 带来的全部内容——从 4.0.0 或 4.0.1 更新的用户也能看到" });
@@ -9836,6 +10015,9 @@ Object.assign(__erZH, {
   "Свой шрифт, поля, фактура или картинка под текстом.": "自定义字体、页边距、纹理或文字下的图片。"
 });
 const WHATS_NEW = [
+  { v: "4.1.0", items: [
+    __ertr("Баланс Elton AI и пополнение прямо в настройках («ИИ, голос и перевод»): любая сумма от 100 до 50 000 ₽, оплата картой через Prodamus — деньги приходят на ключ сами")
+  ] },
   { v: "4.0.2", items: [
     __ertr("Окно «Что нового» снова рассказывает обо всём, что появилось в 4.0, — и тем, кто обновился с 4.0.0 или 4.0.1")
   ] },
@@ -14239,6 +14421,10 @@ const SettingsTab = class extends PluginSettingTab {
           });
       }
     }
+    // Elton AI in use (the AI service or the voice) and a key entered: what is
+    // left on it, and a top-up for any amount without leaving Obsidian.
+    const eltonInUse = (s.aiEnabled === true && (s.aiProvider || "eltonlabs") === "eltonlabs") || s.ttsEnabled === true;
+    if (eltonInUse && erTtsKey(s)) erBalanceRow(this, c);
     this._hint(c, cfg
       ? (cfg.id === "local"
         ? __ertr("Локальная модель: текст никуда не уходит.")
