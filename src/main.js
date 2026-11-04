@@ -9772,6 +9772,9 @@ function bookNoteAction(settings, bookPath) {
   if (s.autoBookNote) return asked[bookPath] ? "prompted" : "auto";
   return asked[bookPath] ? "prompted" : "ask";
 }
+// 4.0.2
+Object.assign(__erEN, { "Окно «Что нового» снова рассказывает обо всём, что появилось в 4.0, — и тем, кто обновился с 4.0.0 или 4.0.1": "The What’s new window again tells you everything that came in 4.0 — also if you updated from 4.0.0 or 4.0.1" });
+Object.assign(__erZH, { "Окно «Что нового» снова рассказывает обо всём, что появилось в 4.0, — и тем, кто обновился с 4.0.0 или 4.0.1": "“新功能”窗口重新介绍 4.0 带来的全部内容——从 4.0.0 或 4.0.1 更新的用户也能看到" });
 // 4.0.1
 Object.assign(__erEN, { "«Сепия» в настройках чтения и в панели на телефоне названа на языке интерфейса, а не латиницей": "“Sepia” in the reading settings and the phone panel is now named in the interface language" });
 Object.assign(__erZH, { "«Сепия» в настройках чтения и в панели на телефоне названа на языке интерфейса, а не латиницей": "阅读设置和手机面板中的“复古色”现在以界面语言显示，不再是英文" });
@@ -9833,6 +9836,9 @@ Object.assign(__erZH, {
   "Свой шрифт, поля, фактура или картинка под текстом.": "自定义字体、页边距、纹理或文字下的图片。"
 });
 const WHATS_NEW = [
+  { v: "4.0.2", items: [
+    __ertr("Окно «Что нового» снова рассказывает обо всём, что появилось в 4.0, — и тем, кто обновился с 4.0.0 или 4.0.1")
+  ] },
   { v: "4.0.1", items: [
     __ertr("«Сепия» в настройках чтения и в панели на телефоне названа на языке интерфейса, а не латиницей")
   ] },
@@ -9953,8 +9959,15 @@ function cmpVer(a, b) {
   }
   return 0;
 }
+// A fix release (4.0.2) still tells the whole story of its line (4.0.0 on):
+// someone who got 4.0.0 and missed its window, or updated 4.0.0 → 4.0.1 and
+// saw one line about a label, would otherwise never learn what 4.0 brought.
+// Nothing is shown when the version did not change.
 function whatsNewSince(lastSeen, current, log) {
-  return (log || WHATS_NEW).filter((r) => cmpVer(r.v, lastSeen) > 0 && cmpVer(r.v, current) <= 0);
+  if (lastSeen && cmpVer(current, lastSeen) <= 0) return [];
+  const [ma, mi] = String(current).split(".");
+  const lineStart = `${ma}.${mi || 0}.0`;
+  return (log || WHATS_NEW).filter((r) => cmpVer(r.v, current) <= 0 && (cmpVer(r.v, lastSeen) > 0 || cmpVer(r.v, lineStart) >= 0));
 }
 // Список изменений остаётся в хранилище заметкой.
 //
