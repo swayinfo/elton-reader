@@ -94,6 +94,27 @@ const OLD = "/^(\\s)|(\\p{Mn})|(\\p{Cf})$/u";   // в файле: /^(\s)|(\p{Mn}
 }
 const workerCode = loadPatchedWorker();
 
+// The Piper voice worker (src/tts-worker.js), bundled on its own and embedded
+// as a string like the pdf.js worker: started from a Blob at runtime.
+const ttsWorker = await esbuild.build({
+  entryPoints: ["src/tts-worker.js"],
+  bundle: true,
+  write: false,
+  format: "iife",
+  platform: "browser",
+  target: "es2020",
+  minify: true,
+  logLevel: "warning",
+  // Obsidian's desktop app starts workers with Node inside them; both speech
+  // engines would then take Node's way of loading files and fail. Inside this
+  // wrapper the worker looks like a plain browser worker.
+  banner: { js: "(function(process,require,module,exports,global,__filename,__dirname,Buffer,setImmediate){" },
+  footer: { js: "})();" },
+  // the phonemizer glue checks for Node; in a worker these are never taken
+  alias: { fs: "./build-stubs/empty.js", path: "./build-stubs/empty.js", crypto: "./build-stubs/empty.js", module: "./build-stubs/empty.js", url: "./build-stubs/empty.js", worker_threads: "./build-stubs/empty.js" },
+});
+const ttsWorkerCode = ttsWorker.outputFiles[0].text;
+
 // Внутри pdf.js, epub.js и jszip есть ветки, которые создают <script> и
 // подгружают код по ссылке. В Obsidian они не выполняются никогда: воркер pdf.js
 // вшит в сборку, страницы EPUB мы разбираем сами и ничего не рендерим в iframe,
@@ -173,7 +194,7 @@ const ctx = await esbuild.context({
   plugins: [neutralise],
   minify: false,
   // Injected as a plain string literal; setupWorker() reads it as __PDF_WORKER_CODE__.
-  define: { __PDF_WORKER_CODE__: JSON.stringify(workerCode) },
+  define: { __PDF_WORKER_CODE__: JSON.stringify(workerCode), __TTS_WORKER_CODE__: JSON.stringify(ttsWorkerCode) },
 });
 
 if (prod) {
