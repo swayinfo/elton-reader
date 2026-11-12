@@ -28,9 +28,11 @@
     "obsidian": "latest"
   },
   "dependencies": {
+    "@mintplex-labs/piper-tts-web": "1.0.5",
     "epubjs": "^0.3.93",
     "jszip": "^3.10.1",
     "localforage": "^1.10.0",
+    "onnxruntime-web": "1.18.0",
     "pdfjs-dist": "^6.2.108"
   },
   "overrides": {
